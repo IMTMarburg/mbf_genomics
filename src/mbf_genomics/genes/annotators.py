@@ -91,6 +91,8 @@ class GeneStrandedSalmon(Annotator):
         )
         df_salmon = df_salmon.reindex(labels=df.index).fillna(0)
         return df_salmon
+
+
 class FromFile(Annotator):
 
     def __init__(self, tablepath: Path, columns_to_add: List[str], index_column_table: str = "gene_stable_id", index_column_genes: str = "gene_stable_id", fill_value: float = None):
