@@ -393,7 +393,7 @@ class DelayedDataFrame(object):
                 df = mangler_function(self.df.copy())
             else:
                 df = self.mangle_df_for_write(self.df)
-            if str(output_filename).endswith(".xls"):
+            if str(output_filename).endswith(".xls") or str(output_filename).endswith(".xlsx"):
                 try:
                     df.to_excel(output_filename, index=False, float_format=float_format)
                 except (ValueError):
