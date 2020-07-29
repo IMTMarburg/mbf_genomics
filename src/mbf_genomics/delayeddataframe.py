@@ -393,7 +393,9 @@ class DelayedDataFrame(object):
                 df = mangler_function(self.df.copy())
             else:
                 df = self.mangle_df_for_write(self.df)
-            if str(output_filename).endswith(".xls") or str(output_filename).endswith(".xlsx"):
+            if str(output_filename).endswith(".xls") or str(output_filename).endswith(
+                ".xlsx"
+            ):
                 try:
                     df.to_excel(output_filename, index=False, float_format=float_format)
                 except (ValueError):
@@ -525,17 +527,23 @@ class Load_Direct:
         for k in s_actual:
             if k in self.ddf.df.columns:
                 raise ValueError("Same column form two annotators", k)
-        if isinstance(a_df.index, pd.RangeIndex):
-            if len(a_df) == len(self.ddf.df):  # assume it's simply ordered by the df
+        if len(a_df) == len(self.ddf.df):
+            if isinstance(a_df.index, pd.RangeIndex) and a_df.index.start == 0:
+                # assume it is in order
                 a_df.index = self.ddf.df.index
-            else:
-                raise ValueError(
-                    "Length and index mismatch between DataFrame and Annotator result - "
-                    "Annotator must return either a DF with a compatible index "
-                    "or at least one with the same length (and a RangeIndex)"
-                )
+        else:
+            raise ValueError(
+                "Length and index mismatch - annotator did not return enough rows"
+            )
+        new_df = pd.concat([self.ddf.df, a_df], axis=1)
+        if len(new_df) != len(self.ddf.df):
+            raise ValueError(
+                "Index mismatch between DataFrame and Annotator result - "
+                "Annotator must return either a DF with a compatible index "
+                "or one with a RangeIndex(0,len(df))"
+            )
+        self.ddf.df = new_df
 
-        self.ddf.df = pd.concat([self.ddf.df, a_df], axis=1)
         for c in self.ddf.children:
             c += anno
 
@@ -681,7 +689,10 @@ class Load_PPG:
     def _anno_load(self, anno):
         def load():
             self.ddf.df = pd.concat(
-                [self.ddf.df, self.ddf.parent.df[anno.columns].loc[self.ddf.df.index]],
+                [
+                    self.ddf.df,
+                    self.ddf.parent.df[anno.columns].reindex(self.ddf.df.index),
+                ],
                 axis=1,
             )
 

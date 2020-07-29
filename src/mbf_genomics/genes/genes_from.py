@@ -205,7 +205,9 @@ def FromBiotypes(genome, allowed_biotypes):
             ok = ok | (genes_df["biotype"] == x)
         return ok
 
-    return Genes(genome).filter("Genes_with_%s" % ",".join(allowed_biotypes), filter)
+    return Genes(genome).filter(
+        "%s_with_%s" % (genome.name, ",".join(allowed_biotypes)), filter
+    )
 
 
 def FromNames(

@@ -1,9 +1,8 @@
 from mbf_genomics.annotator import Annotator
 from mbf_align.raw import Sample
-from mbf_genomes import EnsemblGenome
 from pathlib import Path
 from typing import List
-from pypipegraph import Job
+from pypipegraph import Job, FileInvariant
 import pandas as pd
 import numpy as np
 
@@ -150,4 +149,4 @@ class FromFile(Annotator):
 
     def deps(self, ddf):
         """Return ppg.jobs"""
-        return self.dependencies
+        return FileInvariant(self.tablepath)
