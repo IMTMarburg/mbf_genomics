@@ -640,7 +640,7 @@ class NormalizationFPKM(Annotator):
 
 
 class Salmon(Annotator):
-    """Add salmon gene level estimation calculated on a row Sample
+    """Add salmon gene level estimation calculated on a raw Sample
     """
 
     def __init__(
@@ -679,5 +679,6 @@ class Salmon(Annotator):
         quant_path = Path(self.deps(ddf).job_id).parent / "quant.genes.sf"
         in_df = pd.read_csv(quant_path, sep="\t").set_index("Name")[["TPM", "NumReads"]]
         in_df.columns = self.columns
-        res = in_df.reindex(ddf.df.index)
+        res = in_df.reindex(ddf.df.gene_stable_id)
+        res.index = ddf.df.index
         return res

@@ -166,6 +166,7 @@ class DelayedDataFrame(object):
             df_filter_function, annotators = self.definition_to_function(
                 df_filter_function, column_lookup if column_lookup is not None else {}
             )
+
         else:
             if isinstance(annotators, Annotator):
                 annotators = [annotators]
@@ -181,6 +182,13 @@ class DelayedDataFrame(object):
                     df_filter_function,
                 )
             )
+            if hasattr(df_filter_function, "_dependency_params"):
+                dependencies.append(
+                    ppg.ParameterInvariant(
+                        self.__class__.__name__ + "_" + new_name + "_filter",
+                        df_filter_function._dependency_params,
+                    )
+                )
 
             dependencies.append(self.load())
             for anno in annotators:
@@ -347,7 +355,7 @@ class DelayedDataFrame(object):
             for f in functors:
                 keep &= f(df)
             return keep
-
+        filter_func._dependency_params = (definition, column_lookup)
         return filter_func, annotators
 
     def _new_for_filtering(self, new_name, load_func, deps, **kwargs):
@@ -469,6 +477,26 @@ class DelayedDataFrame(object):
         return output_filename.absolute()
 
 
+def _combine_annotator_df_and_old_df(a_df, ddf_df):
+    if len(a_df) == len(ddf_df):
+        if isinstance(a_df.index, pd.RangeIndex) and a_df.index.start == 0:
+            # assume it is in order
+            a_df.index = ddf_df.index
+    else:
+        raise ValueError(
+            "Length and index mismatch - annotator did not return enough rows"
+        )
+    new_df = pd.concat([ddf_df, a_df], axis=1)
+    if len(new_df) != len(ddf_df):
+        raise ValueError(
+            "Index mismatch between DataFrame and Annotator result concating added %i rows- "
+            % (len(new_df) - len(ddf_df))
+            + "Annotator must return either a DF with a compatible index "
+            "or one with a RangeIndex(0,len(df))"
+        )
+    return new_df
+
+
 class Load_Direct:
     def __init__(self, ddf, loading_function):
         self.ddf = ddf
@@ -527,22 +555,7 @@ class Load_Direct:
         for k in s_actual:
             if k in self.ddf.df.columns:
                 raise ValueError("Same column form two annotators", k)
-        if len(a_df) == len(self.ddf.df):
-            if isinstance(a_df.index, pd.RangeIndex) and a_df.index.start == 0:
-                # assume it is in order
-                a_df.index = self.ddf.df.index
-        else:
-            raise ValueError(
-                "Length and index mismatch - annotator did not return enough rows"
-            )
-        new_df = pd.concat([self.ddf.df, a_df], axis=1)
-        if len(new_df) != len(self.ddf.df):
-            raise ValueError(
-                "Index mismatch between DataFrame and Annotator result - "
-                "Annotator must return either a DF with a compatible index "
-                "or one with a RangeIndex(0,len(df))"
-            )
-        self.ddf.df = new_df
+        self.ddf.df = _combine_annotator_df_and_old_df(a_df, self.ddf.df)
 
         for c in self.ddf.children:
             c += anno
@@ -740,17 +753,7 @@ class Load_PPG:
                     anno.get_cache_name(),
                     set(df.columns).intersection(self.ddf.df.columns),
                 )
-            if isinstance(df.index, pd.RangeIndex):
-                if len(df) == len(self.ddf.df):  # assume it's simply ordered by the df
-                    df.index = self.ddf.df.index
-                else:
-                    raise ValueError(
-                        "Length and index mismatch between DataFrame and Annotator result - "
-                        "Annotator must return either a DF with a compatible index "
-                        "or at least one with the same length (and a RangeIndex)"
-                    )
-
-            self.ddf.df = pd.concat([self.ddf.df, df], axis=1)
+            self.ddf.df = _combine_annotator_df_and_old_df(df, self.ddf.df)
 
         (self.ddf.cache_dir / anno.__class__.__name__).mkdir(exist_ok=True)
         job = ppg.CachedDataLoadingJob(
