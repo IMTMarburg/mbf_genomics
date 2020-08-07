@@ -209,7 +209,7 @@ class TagCountCommonQC:
             # self.register_qc_cummulative(genes)
 
     def register_qc_distribution(self, genes):
-        output_filename = genes.result_dir / self.qc_folder / f"read_distribution.png"
+        output_filename = genes.result_dir / self.qc_folder / "read_distribution.png"
         output_filename.parent.mkdir(exist_ok=True)
 
         def plot(output_filename, elements):
@@ -257,7 +257,7 @@ class TagCountCommonQC:
         )
 
     def register_qc_pca(self, genes):
-        output_filename = genes.result_dir / self.qc_folder / f"pca.png"
+        output_filename = genes.result_dir / self.qc_folder / "pca.png"
 
         def plot(output_filename, elements):
             import sklearn.decomposition as decom
@@ -637,3 +637,48 @@ class NormalizationFPKM(Annotator):
         raise NotImplementedError(
             "FPKM is a bad thing to use. It is not supported by mbf"
         )
+
+
+class Salmon(Annotator):
+    """Add salmon gene level estimation calculated on a raw Sample
+    """
+
+    def __init__(
+        self,
+        raw_lane,
+        prefix="Salmon",
+        options={
+            # "--validateMappings": None,  this always get's set by aligners.Salmon
+            "--gcBias": None,
+            "--seqBias": None,
+        },
+        libtype="A",
+        accepted_biotypes=None,  # set(("protein_coding", "lincRNA")),
+        salmon_version="_last_used",
+    ):
+        self.raw_lane = raw_lane
+        self.options = options.copy()
+        self.libtype = libtype
+        self.accepted_biotypes = accepted_biotypes
+        self.salmon_version = salmon_version
+        self.columns = [
+            f"{prefix} TPM {raw_lane.name}",
+            f"{prefix} NumReads {raw_lane.name}",
+        ]
+
+    def deps(self, ddf):
+        import mbf_externals
+
+        return mbf_externals.aligners.Salmon(
+            self.accepted_biotypes, version=self.salmon_version
+        ).run_quant_on_raw_lane(
+            self.raw_lane, ddf.genome, self.libtype, self.options, gene_level=True
+        )
+
+    def calc_ddf(self, ddf):
+        quant_path = Path(self.deps(ddf).job_id).parent / "quant.genes.sf"
+        in_df = pd.read_csv(quant_path, sep="\t").set_index("Name")[["TPM", "NumReads"]]
+        in_df.columns = self.columns
+        res = in_df.reindex(ddf.df.gene_stable_id)
+        res.index = ddf.df.index
+        return res

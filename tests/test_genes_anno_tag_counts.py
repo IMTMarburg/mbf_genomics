@@ -323,9 +323,7 @@ class TestGeneCount:
         run_pipegraph()
         assert list(genes.df.index) == list(
             range(len(genes.df))
-        ), (
-            "make sure the Genes.df has an index 0..n"
-        )  # make sure that the Genes have an index that goes 0..n
+        ), "make sure the Genes.df has an index 0..n"  # make sure that the Genes have an index that goes 0..n
 
         assert (
             genes.df.gene_stable_id
@@ -1404,8 +1402,8 @@ class TestQC:
             "AA123",
         )  # index creation is automatic
         genes = Genes(genome)
-        for l in [lane, lane2]:
-            anno = anno_tag_counts.GeneStranded(l)
+        for lane in [lane, lane2]:
+            anno = anno_tag_counts.GeneStranded(lane)
             genes += anno
             genes += anno_tag_counts.NormalizationTPM(anno)
             genes += anno_tag_counts.NormalizationCPM(anno)
@@ -1456,8 +1454,8 @@ class TestQC:
             result[2] = 1
             return pd.Series(result)
 
-        for l in [lane, lane2]:
-            anno = anno_tag_counts.GeneUnstranded(l)
+        for lane in [lane, lane2]:
+            anno = anno_tag_counts.GeneUnstranded(lane)
             anno.calc = fake_calc
             genes += anno
 
@@ -1491,19 +1489,19 @@ class TestQC:
             "AA123",
         )  # index creation is automatic
         genes = Genes(genome)
-        genes = genes.filter('none', lambda df: [False] * len(df))
+        genes = genes.filter("none", lambda df: [False] * len(df))
 
         def fake_calc(df):
             result = np.zeros((len(df),), np.float)
             return pd.Series(result)
 
-        for l in [lane, lane2]:
-            anno = anno_tag_counts.GeneUnstranded(l)
+        for lane in [lane, lane2]:
+            anno = anno_tag_counts.GeneUnstranded(lane)
             anno.calc = fake_calc
             genes += anno
 
         assert not qc_disabled()
-        prune_qc(lambda job: "read_distribution" in job.job_id and 'none' in job.job_id)
+        prune_qc(lambda job: "read_distribution" in job.job_id and "none" in job.job_id)
         run_pipegraph()
         qc_jobs = list(get_qc_jobs())
         qc_jobs = [x for x in qc_jobs if not x._pruned]

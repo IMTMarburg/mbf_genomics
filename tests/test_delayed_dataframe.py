@@ -480,8 +480,8 @@ class Test_DelayedDataFrameDirect:
         )
         with pytest.raises(ValueError) as excinfo:
             a += BrokenAnno()
-            print(str(excinfo))
-            assert "Length and index mismatch " in str(excinfo.value)
+        print(str(excinfo))
+        assert "Length and index mismatch " in str(excinfo.value)
 
     def test_anno_returning_series(self):
         a = DelayedDataFrame(
@@ -534,7 +534,20 @@ class Test_DelayedDataFrameDirect:
 
         with pytest.raises(ValueError) as excinfo:
             a += SeriesAnno()
-            assert "result was no dataframe" in str(excinfo)
+        assert "return non DataFrame" in str(excinfo)
+
+    def test_anno_returing_right_length_but_wrong_start_range_index(self):
+        a = DelayedDataFrame("shu", lambda: pd.DataFrame({"A": [1, 2, 3]}))
+
+        class BadAnno(Annotator):
+            columns = ["X"]
+
+            def calc(self, df):
+                return pd.Series(["a", "b", "c"], index=pd.RangeIndex(5, 5 + 3))
+
+        with pytest.raises(ValueError) as excinfo:
+            a += BadAnno()
+        assert "Index mismatch" in str(excinfo)
 
     def test_lying_about_columns(self):
         a = DelayedDataFrame(
@@ -1157,3 +1170,20 @@ class Test_DelayedDataFramePPG:
         with pytest.raises(ppg.RuntimeError):
             ppg.run_pipegraph()
         assert isinstance(job.exception, ppg.JobContractError)
+
+    def test_anno_returing_right_length_but_wrong_start_range_index(self):
+        a = DelayedDataFrame("shu", lambda: pd.DataFrame({"A": [1, 2, 3]}))
+
+        class BadAnno(Annotator):
+            columns = ["X"]
+
+            def calc(self, df):
+                return pd.Series(["a", "b", "c"], index=pd.RangeIndex(5, 5 + 3))
+        a += BadAnno()
+        force_load(a.annotate())
+        lj = a.anno_jobs["X"]
+        with pytest.raises(ppg.RuntimeError):
+            ppg.run_pipegraph()
+        assert "Index mismatch" in str(lj().exception)
+
+

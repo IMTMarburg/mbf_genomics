@@ -1,4 +1,4 @@
-from mbf_genomics.annotator import Annotator
+from mbf_genomics.annotator import Annotator, FromFile
 from typing import Dict, List
 from pypipegraph import Job
 from mbf_genomics import DelayedDataFrame
@@ -39,6 +39,14 @@ class Description(Annotator):
         return pd.Series(result, index=ddf.df.index)
 
 
+def GeneStrandedSalmon(*args, **kwargs):
+    """Deprecated. use anno_tag_counts.Salmon
+    """
+    raise NotImplementedError("Deprecated. Use anno_tag_counts.Salmon")
+
+
+# FromFile forwarded to mbf_genomics.annotator.FromFile
+FromFile = FromFile
 class TMM(Annotator):
     """
     Calculates the TMM normalization from edgeR on some raw counts.
