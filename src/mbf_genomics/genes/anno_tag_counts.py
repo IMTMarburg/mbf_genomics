@@ -580,7 +580,7 @@ class NormalizationCPM(_NormalizationAnno):
     """Normalize to 1e6 by taking the sum of all genes"""
 
     def __init__(self, base_column_spec):
-        self.name = "CPM(lane"
+        self.name = "CPM"
         self.normalize_to = 1e6
         super().__init__(base_column_spec)
         self.column_properties = {
