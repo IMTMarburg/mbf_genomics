@@ -4,8 +4,6 @@ from pypipegraph import Job
 from mbf_genomics import DelayedDataFrame
 from pandas import DataFrame
 import pandas as pd
-import rpy2.robjects as ro
-import rpy2.robjects.numpy2ri as numpy2ri
 import hashlib
 
 
@@ -129,6 +127,8 @@ class TMM(Annotator):
             A dataframe with TMM values (trimmed mean of M-values).
         """
         import mbf_r
+        import rpy2.robjects as ro
+        # import rpy2.robjects.numpy2ri as numpy2ri
 
         ro.r("library(edgeR)")
         df_input = df_counts
