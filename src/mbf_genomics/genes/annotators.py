@@ -4,7 +4,6 @@ from pypipegraph import Job
 from mbf_genomics import DelayedDataFrame
 from pandas import DataFrame
 import pandas as pd
-import mbf_r
 import rpy2.robjects as ro
 import rpy2.robjects.numpy2ri as numpy2ri
 import hashlib
@@ -47,6 +46,8 @@ def GeneStrandedSalmon(*args, **kwargs):
 
 # FromFile forwarded to mbf_genomics.annotator.FromFile
 FromFile = FromFile
+
+
 class TMM(Annotator):
     """
     Calculates the TMM normalization from edgeR on some raw counts.
@@ -61,11 +62,20 @@ class TMM(Annotator):
         A dictionary sample name to group name, by default None.
     """
 
-    def __init__(self, raw: Dict[str, Annotator], dependencies: List[Job] = None, samples_to_group: Dict[str, str] = None):
+    def __init__(
+        self,
+        raw: Dict[str, Annotator],
+        dependencies: List[Job] = None,
+        samples_to_group: Dict[str, str] = None,
+    ):
         """Constructor."""
+        import mbf_r # so we fail early
+
         self.sample_column_lookup = {}
         for sample_name in raw:
-            self.sample_column_lookup[sample_name] = f"{raw[sample_name].columns[0]} TMM"
+            self.sample_column_lookup[
+                sample_name
+            ] = f"{raw[sample_name].columns[0]} TMM"
         self.columns = list(self.sample_column_lookup.values())
         self.dependencies = []
         if dependencies is not None:
@@ -118,18 +128,20 @@ class TMM(Annotator):
         DataFrame
             A dataframe with TMM values (trimmed mean of M-values).
         """
+        import mbf_r
+
         ro.r("library(edgeR)")
         df_input = df_counts
         to_df = {"lib.size": df_input.sum(axis=0)}
         if self.samples_to_group is not None:
-            to_df["group"] = [self.samples_to_group[sample_name] for sample_name in self.samples_to_group]
+            to_df["group"] = [
+                self.samples_to_group[sample_name]
+                for sample_name in self.samples_to_group
+            ]
         df_samples = pd.DataFrame(to_df)
         r_counts = mbf_r.convert_dataframe_to_r(df_input)
         r_samples = mbf_r.convert_dataframe_to_r(df_samples)
-        y = ro.r("DGEList")(
-            counts=r_counts,
-            samples=r_samples,
-        )
+        y = ro.r("DGEList")(counts=r_counts, samples=r_samples,)
         # apply TMM normalization
         y = ro.r("calcNormFactors")(y)
         norm_factors = ro.r("function(y){y$samples}")(y)
