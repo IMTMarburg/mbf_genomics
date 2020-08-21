@@ -672,6 +672,7 @@ class Salmon(Annotator):
             f"{prefix} TPM {raw_lane.name}",
             f"{prefix} NumReads {raw_lane.name}",
         ]
+        self.vid = self.raw_lane.vid
 
     def deps(self, ddf):
         import mbf_externals

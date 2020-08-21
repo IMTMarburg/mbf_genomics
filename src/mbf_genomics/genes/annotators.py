@@ -1,8 +1,4 @@
 from mbf_genomics.annotator import Annotator, FromFile
-from pandas import DataFrame
-import pandas as pd
-import hashlib
-import numpy as np
 
 
 class Description(Annotator):
