@@ -1,5 +1,5 @@
 from mbf_genomics.annotator import Annotator, FromFile
-
+import pandas as pd
 
 class Description(Annotator):
     """Add the description for the genes from genome.
