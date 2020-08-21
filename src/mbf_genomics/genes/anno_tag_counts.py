@@ -4,15 +4,22 @@ Use these for new projects.
 
 """
 from mbf_genomics.annotator import Annotator
+from typing import Dict, List
+from pypipegraph import Job, FileInvariant
+from mbf_genomics import DelayedDataFrame
 import numpy as np
 import pypipegraph as ppg
 import hashlib
 import pandas as pd
+import mbf_r
+import rpy2.robjects as ro
+import rpy2.robjects.numpy2ri as numpy2ri
 from pathlib import Path
 from dppd import dppd
 import dppd_plotnine  # noqa:F401
 from mbf_qualitycontrol import register_qc, QCCollectingJob, qc_disabled
 from mbf_genomics.util import parse_a_or_c_to_plot_name
+from pandas import DataFrame
 
 dp, X = dppd()
 
@@ -682,3 +689,246 @@ class Salmon(Annotator):
         res = in_df.reindex(ddf.df.gene_stable_id)
         res.index = ddf.df.index
         return res
+
+
+class TMM(Annotator):
+    """
+    Calculates the TMM normalization from edgeR on some raw counts.
+
+    Returns log2-transformed cpms corrected by the TMM-estimated effective
+    library sizes. In addition, batch correction using limma might be performed,
+    if a dictionary indicatin the batches is given.
+
+    Parameters
+    ----------
+    raw : Dict[str, Annotator]
+        Dictionary of raw count annotator for all samples.
+    dependencies : List[Job], optional
+        List of additional dependencies, by default [].
+    samples_to_group : Dict[str, str], optional
+        A dictionary sample name to group name, by default None.
+    batches. : Dict[str, str]
+        Dictionary indicating batch effects.
+    """
+
+    def __init__(
+        self,
+        raw: Dict[str, Annotator],
+        dependencies: List[Job] = None,
+        samples_to_group: Dict[str, str] = None,
+        batches: Dict[str, str] = None,
+        suffix: str = ""
+    ):
+        """Constructor."""
+        self.sample_column_lookup = {}
+        if batches is not None:
+            for sample_name in raw:
+                self.sample_column_lookup[
+                    raw[sample_name].columns[0]
+                ] = f"{sample_name}{suffix} TMM (batch removed)"
+        else:
+            for sample_name in raw:
+                self.sample_column_lookup[raw[sample_name].columns[0]] = f"{sample_name}{suffix} TMM"
+        self.columns = list(self.sample_column_lookup.values())
+        self.dependencies = []
+        if dependencies is not None:
+            self.dependencies = dependencies
+        self.raw = raw
+        self.samples_to_group = samples_to_group
+        self.cache_name = hashlib.md5(self.columns[0].encode("utf-8")).hexdigest()
+        self.batch = None
+        if batches is not None:
+            self.batch = [batches[sample_name] for sample_name in raw]
+
+    def calc_ddf(self, ddf: DelayedDataFrame) -> DataFrame:
+        """
+        Calculates TMM columns to be added to the ddf instance.
+
+        TMM columns are calculated using edgeR with all samples given in self.raw.
+
+        Parameters
+        ----------
+        ddf : DelayedDataFrame
+            The DelayedDataFrame instance to be annotated.
+
+        Returns
+        -------
+        DataFrame
+            A dataframe containing TMM normalized columns for each
+        """
+        raw_columns = [self.raw[sample_name].columns[0] for sample_name in self.raw]
+        df = ddf.df[raw_columns]
+        df_res = self.call_edgeR(df)
+        rename = {}
+        for col in df_res.columns:
+            rename[col] = self.sample_column_lookup[col]
+        df_res = df_res.rename(columns=rename)
+        return df_res
+
+    def call_edgeR(self, df_counts: DataFrame) -> DataFrame:
+        """
+        Call to edgeR via r2py to get TMM (trimmed mean of M-values)
+        normalization for raw counts.
+
+        Prepare the edgeR input in python and call edgeR calcNormFactors via
+        r2py. The TMM normalized values are returned in a DataFrame which
+        is converted back to pandas DataFrame via r2py.
+
+        Parameters
+        ----------
+        df_counts : DataFrame
+            The dataframe containing the raw counts.
+
+        Returns
+        -------
+        DataFrame
+            A dataframe with TMM values (trimmed mean of M-values).
+        """
+        ro.r("library(edgeR)")
+        ro.r("library(base)")
+        df_input = df_counts
+        columns = df_input.columns
+        to_df = {"lib.size": df_input.sum(axis=0).values}
+        if self.samples_to_group is not None:
+            to_df["group"] = [
+                self.samples_to_group[sample_name]
+                for sample_name in self.samples_to_group
+            ]
+        if self.batch is not None:
+            to_df["batch"] = self.batch
+        df_samples = pd.DataFrame(to_df)
+        df_samples["lib.size"] = df_samples["lib.size"].astype(int)
+        r_counts = mbf_r.convert_dataframe_to_r(df_input)
+        r_samples = mbf_r.convert_dataframe_to_r(df_samples)
+        y = ro.r("DGEList")(counts=r_counts, samples=r_samples,)
+        # apply TMM normalization
+        y = ro.r("calcNormFactors")(y)  # default is TMM
+        logtmm = ro.r(
+            """function(y){
+                cpm(y, log=TRUE, prior.count=5)
+                }"""
+            )(y)  # apparently removeBatchEffects works better on log2-transformed values
+        if self.batch is not None:
+            batches = np.array(self.batch)
+            batches = numpy2ri.py2rpy(batches)
+            logtmm = ro.r(
+                """
+                function(logtmm, batch) {
+                    tmm = removeBatchEffect(logtmm,batch=batch)
+                }
+                """
+            )(logtmm=logtmm, batch=batches)
+        cpm = ro.r("data.frame")(logtmm)
+        df = mbf_r.convert_dataframe_from_r(cpm)
+        df = df.reset_index(drop=True)
+        df.columns = columns
+        return df
+
+    def deps(self, ddf) -> List[Job]:
+        """Return ppg.jobs"""
+        return self.dependencies
+
+    def dep_annos(self) -> List[Annotator]:
+        """Return other annotators"""
+        return list(self.raw.values())
+
+
+class VST(Annotator):
+    """
+    Calculates the variance-stablilizing transformation from DESeq2 on some raw
+    counts.
+
+    Parameters
+    ----------
+    raw : Dict[str, Annotator]
+        Dictionary of raw count annotator for all samples.
+    dependencies : List[Job], optional
+        List of additional dependencies, by default [].
+    samples_to_group : Dict[str, str], optional
+        A dictionary sample name to group name, by default None.
+    batches : Dict[str, str]
+        Dictionary indicating batch effects.
+    """
+
+    def __init__(
+        self,
+        raw: Dict[str, Annotator],
+        dependencies: List[Job] = None,
+        samples_to_group: Dict[str, str] = None,
+        batches: Dict[str, str] = None,
+    ):
+        """Constructor."""
+        self.sample_column_lookup = {}
+        if batches is not None:
+            for sample_name in raw:
+                self.sample_column_lookup[
+                    raw[sample_name].columns[0]
+                ] = f"{sample_name} VST"
+        else:
+            for sample_name in raw:
+                self.sample_column_lookup[raw[sample_name].columns[0]] = f"{sample_name} VST"
+        self.columns = list(self.sample_column_lookup.values())
+        self.dependencies = []
+        if dependencies is not None:
+            self.dependencies = dependencies
+        self.raw = raw
+        self.samples_to_group = samples_to_group
+        self.cache_name = hashlib.md5(self.columns[0].encode("utf-8")).hexdigest()
+        self.batch = None
+        if batches is not None:
+            self.batch = [batches[sample_name] for sample_name in raw]
+
+    def calc_ddf(self, ddf: DelayedDataFrame) -> DataFrame:
+        """
+        Calculates VST columns to be added to the ddf instance.
+
+        TMM columns are calculated using DESeq2 with all samples given in self.raw.
+
+        Parameters
+        ----------
+        ddf : DelayedDataFrame
+            The DelayedDataFrame instance to be annotated.
+
+        Returns
+        -------
+        DataFrame
+            A dataframe containing VST normalized columns for each sample.
+        """
+        raw_columns = [self.raw[sample_name].columns[0] for sample_name in self.raw]
+        df = ddf.df[raw_columns]
+        df_res = self.call_deseq(df)
+        rename = {}
+        for col in df_res.columns:
+            rename[col] = f"{col} VST"
+        df_res = df_res.rename(columns=rename)
+        return df_res
+
+    def call_deseq(self, df_counts: DataFrame) -> DataFrame:
+        """
+        Call to DEseq2 via r2py to get variance-stabilized expression
+        normalization for raw counts.
+
+        Prepares the deseq input in python and calls deseq via
+        r2py. The normalized values are returned in a DataFrame which
+        is converted back to pandas DataFrame via r2py.
+
+        Parameters
+        ----------
+        df_counts : DataFrame
+            The dataframe containing the raw counts.
+
+        Returns
+        -------
+        DataFrame
+            A dataframe with TMM values (trimmed mean of M-values).
+        """
+        ro.r("library(DEseq2)")
+        raise NotImplementedError
+
+    def deps(self, ddf) -> List[Job]:
+        """Return ppg.jobs"""
+        return self.dependencies
+
+    def dep_annos(self) -> List[Annotator]:
+        """Return other annotators"""
+        return list(self.raw.values())
