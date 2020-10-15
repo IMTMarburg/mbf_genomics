@@ -1,5 +1,6 @@
 from abc import ABC
 from typing import List
+import hashlib
 import pandas as pd
 import pypipegraph as ppg
 from .util import freeze
@@ -77,6 +78,7 @@ class FromFile(Annotator):
         index_column_table: str = "gene_stable_id",
         index_column_genes: str = "gene_stable_id",
         fill_value: float = None,
+        is_tsv: bool = False,
     ):
         """
         Adds arbitrary columns from a table.
@@ -96,21 +98,25 @@ class FromFile(Annotator):
             Index column in ddf to append to, by default "gene_stable_id".
         fill_value : float, optonal
             Value to fill for missing rows, defaults to np.NaN.
+        is_tsv : bool
+            If the input file is a .tsv file regardless of the suffix.
         """
         self.tablepath = tablepath
         self.columns = columns_to_add
         self.index_column_table = index_column_table
         self.index_column_genes = index_column_genes
         self.fill = fill_value if fill_value is not None else np.NaN
+        self.is_tsv = is_tsv
 
     def parse(self):
-        if (self.tablepath.suffix == ".xls") or (self.tablepath.suffix == ".xlsx"):
+        if ((self.tablepath.suffix == ".xls") or (self.tablepath.suffix == ".xlsx")) and not self.is_tsv:
             return pd.read_excel(self.tablepath)
         else:
             return pd.read_csv(self.tablepath, sep="\t")
 
     def get_cache_name(self):
-        return f"FromFile_{self.tablepath.name}"
+        suffix = f"{self.tablepath.name}_{self.columns[0]}".encode("utf-8")
+        return f"FromFile_{hashlib.md5(suffix).hexdigest()}"
 
     def calc_ddf(self, ddf):
         """Calculates the ddf to append."""
