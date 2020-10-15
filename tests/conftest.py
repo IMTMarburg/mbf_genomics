@@ -24,6 +24,10 @@ from mbf_genomics.testing.fixtures import clear_annotators  # noqa:F401
 root = Path(__file__).parent.parent
 sys.path.append(str(root / "src"))
 
+local_store_path = root / "tests" / "run" / "local_store"
+local_store_path.mkdir(exist_ok=True, parents=True)
+local_store = local_store(local_store_path)
+
 from plotnine.tests.conftest import (  # noqa:F401
     _setup,
     _teardown,  # noqa:F401
