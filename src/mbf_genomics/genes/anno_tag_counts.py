@@ -231,10 +231,13 @@ class TagCountCommonQC:
                 plot = dp(plot_df).p9().theme_bw()
                 print(df)
 
+
+                #df.to_pickle(output_filename + '.pickle')
                 if ((df > 0).sum(axis=0) > 1).any() and len(df) > 1:
-                    plot = plot.geom_violin(
-                        dp.aes(x="sample", y="count"), width=0.5, bw=0.1
-                    )
+                    #plot = plot.geom_violin(
+                        #dp.aes(x="sample", y="count"), width=0.5, bw=0.1
+                    #)
+                   pass # oh so slow as of 20201019
                 if len(plot_df["sample"].unique()) > 1:
                     plot = plot.annotation_stripes(fill_range=True)
                 if (plot_df["count"] > 0).any():
@@ -244,7 +247,6 @@ class TagCountCommonQC:
                         name=self.qc_distribution_scale_y_name,
                         breaks=[1, 10, 100, 1000, 10000, 100_000, 1e6, 1e7],
                     )
-                print(plot_df)
 
                 return (
                     plot.add_boxplot(
