@@ -1,6 +1,7 @@
 from mbf_genomics.annotator import Annotator, FromFile
 import pandas as pd
 
+
 class Description(Annotator):
     """Add the description for the genes from genome.
 
@@ -31,8 +32,7 @@ class Description(Annotator):
 
 
 def GeneStrandedSalmon(*args, **kwargs):
-    """Deprecated. use anno_tag_counts.Salmon
-    """
+    """Deprecated. use anno_tag_counts.Salmon"""
     raise NotImplementedError("Deprecated. Use anno_tag_counts.Salmon")
 
 

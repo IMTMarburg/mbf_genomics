@@ -5,7 +5,7 @@ Use these for new projects.
 """
 from mbf_genomics.annotator import Annotator
 from typing import Dict, List
-from pypipegraph import Job, FileInvariant
+from pypipegraph import Job
 from mbf_genomics import DelayedDataFrame
 import numpy as np
 import pypipegraph as ppg
@@ -231,13 +231,12 @@ class TagCountCommonQC:
                 plot = dp(plot_df).p9().theme_bw()
                 print(df)
 
-
-                #df.to_pickle(output_filename + '.pickle')
+                # df.to_pickle(output_filename + '.pickle')
                 if ((df > 0).sum(axis=0) > 1).any() and len(df) > 1:
-                    #plot = plot.geom_violin(
-                        #dp.aes(x="sample", y="count"), width=0.5, bw=0.1
-                    #)
-                   pass # oh so slow as of 20201019
+                    # plot = plot.geom_violin(
+                    # dp.aes(x="sample", y="count"), width=0.5, bw=0.1
+                    # )
+                    pass  # oh so slow as of 20201019
                 if len(plot_df["sample"].unique()) > 1:
                     plot = plot.annotation_stripes(fill_range=True)
                 if (plot_df["count"] > 0).any():
@@ -607,7 +606,7 @@ class NormalizationCPM(_NormalizationAnno):
 
 class NormalizationTPM(_NormalizationAnno):
     """Normalize to transcripts per million, ie.
-        count / length * (1e6 / (sum_i(count_/length_i)))
+    count / length * (1e6 / (sum_i(count_/length_i)))
 
     """
 
@@ -649,8 +648,7 @@ class NormalizationFPKM(Annotator):
 
 
 class Salmon(Annotator):
-    """Add salmon gene level estimation calculated on a raw Sample
-    """
+    """Add salmon gene level estimation calculated on a raw Sample"""
 
     def __init__(
         self,
@@ -720,7 +718,7 @@ class TMM(Annotator):
         dependencies: List[Job] = None,
         samples_to_group: Dict[str, str] = None,
         batches: Dict[str, str] = None,
-        suffix: str = ""
+        suffix: str = "",
     ):
         """Constructor."""
         self.sample_column_lookup = {}
@@ -731,7 +729,9 @@ class TMM(Annotator):
                 ] = f"{sample_name}{suffix} TMM (batch removed)"
         else:
             for sample_name in raw:
-                self.sample_column_lookup[raw[sample_name].columns[0]] = f"{sample_name}{suffix} TMM"
+                self.sample_column_lookup[
+                    raw[sample_name].columns[0]
+                ] = f"{sample_name}{suffix} TMM"
         self.columns = list(self.sample_column_lookup.values())
         self.dependencies = []
         if dependencies is not None:
@@ -803,14 +803,19 @@ class TMM(Annotator):
         df_samples["lib.size"] = df_samples["lib.size"].astype(int)
         r_counts = mbf_r.convert_dataframe_to_r(df_input)
         r_samples = mbf_r.convert_dataframe_to_r(df_samples)
-        y = ro.r("DGEList")(counts=r_counts, samples=r_samples,)
+        y = ro.r("DGEList")(
+            counts=r_counts,
+            samples=r_samples,
+        )
         # apply TMM normalization
         y = ro.r("calcNormFactors")(y)  # default is TMM
         logtmm = ro.r(
             """function(y){
                 cpm(y, log=TRUE, prior.count=5)
                 }"""
-            )(y)  # apparently removeBatchEffects works better on log2-transformed values
+        )(
+            y
+        )  # apparently removeBatchEffects works better on log2-transformed values
         if self.batch is not None:
             batches = np.array(self.batch)
             batches = numpy2ri.py2rpy(batches)

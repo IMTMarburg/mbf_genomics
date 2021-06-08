@@ -717,7 +717,9 @@ class Test_DelayedDataFramePPG:
 
     def test_annotator_columns_not_list(self):
         class BrokenAnno(Annotator):
-            def __init__(self,):
+            def __init__(
+                self,
+            ):
                 self.columns = "shu"
 
             def calc(self, df):
@@ -1179,11 +1181,10 @@ class Test_DelayedDataFramePPG:
 
             def calc(self, df):
                 return pd.Series(["a", "b", "c"], index=pd.RangeIndex(5, 5 + 3))
+
         a += BadAnno()
         force_load(a.annotate())
         lj = a.anno_jobs["X"]
         with pytest.raises(ppg.RuntimeError):
             ppg.run_pipegraph()
         assert "Index mismatch" in str(lj().exception)
-
-
