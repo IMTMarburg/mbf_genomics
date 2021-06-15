@@ -1,0 +1,556 @@
+============================= test session starts ==============================
+platform linux -- Python 3.8.6, pytest-6.1.1, py-1.9.0, pluggy-0.13.1 -- /home/finkernagel/upstream/dev/bin/python3
+cachedir: .pytest_cache
+benchmark: 3.2.3 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: /home/finkernagel/upstream/imtmarburg/mbf_genomics, configfile: setup.cfg, testpaths: tests
+plugins: benchmark-3.2.3, profiling-1.7.0, icdiff-0.5, cov-2.10.1, requests-mock-1.8.0, mock-3.4.0, anyio-2.0.2
+collecting ... collected 553 items / 467 deselected / 86 selected
+run-last-failure: rerun previous 86 failures
+
+tests/test_annotatable.py::Test_FromOldGenomics::test_annotator_copying_on_filter_two_deep FAILED [  1%]
+
+=================================== FAILURES ===================================
+________ Test_FromOldGenomics.test_annotator_copying_on_filter_two_deep ________
+
+self = <tests.test_annotatable.Test_FromOldGenomics object at 0x7f6a0cc7acd0>
+new_pipegraph = <pypipegraph2.graph.PyPipeGraph object at 0x7f6a0cc8a370>
+job_trace_log = None
+
+    def test_annotator_copying_on_filter_two_deep(self, new_pipegraph, job_trace_log):
+        new_pipegraph.new()
+    
+        a = DummyAnnotatable("A")
+        anno = SequenceAnnotator()
+        even = a.filter("event", lambda df: df["b"] % 2 == 0)
+        force_load(even)
+        second = even.filter("event2", lambda df: df["b"] == 4)
+        a.add_annotator(anno)
+        force_load(second)
+        import pypipegraph2 as ppg2
+        #ppg.run_pipegraph
+>       ppg2.run(dump_graphml=True)
+
+/home/finkernagel/upstream/imtmarburg/mbf_genomics/tests/test_annotatable.py:169: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/__init__.py:122: in run
+    return global_pipegraph.run(
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/graph.py:114: in run
+    return self._run(print_failures, raise_on_job_error, event_timeout, None, dump_graphml=dump_graphml)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <pypipegraph2.graph.PyPipeGraph object at 0x7f6a0cc7aca0>
+print_failures = True, raise_on_job_error = True, event_timeout = 5
+focus_on_these_jobs = None, dump_graphml = True
+
+    def _run(
+        self,
+        print_failures: bool = True,
+        raise_on_job_error=True,
+        event_timeout=5,
+        focus_on_these_jobs=None,
+        dump_graphml=False
+    ) -> Dict[str, JobState]:
+        """Run the jobgraph - possibly focusing on a subset of jobs (ie. ignoring
+        anything that's not necessary to calculate them - activated by calling a Job
+        """
+        ts = str(
+            time.time()
+        )  # include subsecond in log names - usefull for the testing, I suppose.
+        ts = ts[ts.rfind(".") :]
+        self.time_str = datetime.datetime.now().strftime(time_format) + ts
+        if not networkx.algorithms.is_directed_acyclic_graph(self.job_dag):
+            print(networkx.readwrite.json_graph.node_link_data(self.job_dag))
+            raise exceptions.NotADag()
+        else:
+            # print(networkx.readwrite.json_graph.node_link_data(self.job_dag))
+            pass
+        start_time = time.time()
+        self._resolve_dependency_callbacks()
+        self.running = True  # must happen after dependency callbacks
+        if self.error_dir:
+            (self.error_dir / self.time_str).mkdir(exist_ok=True, parents=True)
+        if self.log_dir:
+            self.log_dir.mkdir(exist_ok=True, parents=True)
+            fn = Path(sys.argv[0]).name
+            print('log level', self.log_level)
+            logger.add(open(self.log_dir / f"{fn}-{self.time_str}.log", "w"), level = min(self.log_level, logging.INFO))
+            if False:
+                logger.add(
+                    RichHandler(
+                        markup=False,
+                        console=Console(
+                            file=open(self.log_dir / f"{fn}-{self.time_str}.log", "w"),
+                            width=120,  #
+                        ),
+                    ),
+                    level=self.log_level,
+                )
+            logger.add(sink=sys.stdout, level=self.log_level)  # pragma: no cover
+            import threading
+    
+            log_info(
+                f"Run is go {threading.get_ident()} pid: {os.getpid()}, run_id {self.run_id}"
+            )
+        self._cleanup_logs()
+        self._cleanup_errors()
+        self.history_dir.mkdir(exist_ok=True, parents=True)
+        self.run_dir.mkdir(exist_ok=True, parents=True)
+        self.do_raise = []
+        self._restart_afterwards = False
+        try:
+            result = None
+            self._install_signals()
+            history = self._load_history()
+            max_runs = 5
+            jobs_already_run = set()
+            final_result = {}
+            while True:
+                max_runs -= 1
+                if max_runs == 0:  # pragma: no cover
+                    raise ValueError("endless loop")
+                do_break = False
+                try:
+                    self.runner = Runner(
+                        self,
+                        history,
+                        event_timeout,
+                        focus_on_these_jobs,
+                        jobs_already_run,
+                        dump_graphml
+                    )
+                    result = self.runner.run(self.run_id, result)
+                    del self.runner
+                    self.run_id += 1
+                    do_break = True
+                except _RunAgain as e:
+                    log_info("Jobs created - running again")
+                    result = e.args[0]
+                self._update_history(result, history)
+                self._log_runtimes(result, start_time)
+                jobs_already_run.update(result.keys())
+                for k, v in result.items():
+                    if (
+                        not k in final_result
+                        or final_result[k].state != JobState.Failed
+                    ):
+                        final_result[k] = v
+                # final_result.update(result)
+                if do_break:
+                    break
+                # final_result.update(result)
+            del result
+            for job_id, job_state in final_result.items():
+                if job_state.state == JobState.Failed:
+                    if (
+                        raise_on_job_error
+                        and not "At least one job failed" in self.do_raise
+                    ):
+                        self.do_raise.append("At least one job failed")
+            self.last_run_result = final_result
+            if self.do_raise and not self._restart_afterwards:
+>               raise exceptions.RunFailed(*self.do_raise)
+E               pypipegraph2.exceptions.RunFailed: At least one job failed
+
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/graph.py:222: RunFailed
+----------------------------- Captured stdout call -----------------------------
+event <function Load_PPG.annotate.<locals>.<lambda> at 0x7f6a0cc1f670>
+event2 <function Load_PPG.annotate.<locals>.<lambda> at 0x7f6a0cc1fdc0>
+HERE DataLoadingJob: loadcache/DelayedDataFrame/A/SequenceAnnotator/sequence DataLoadingJob: loadcache/DelayedDataFrame/A/calc
+there
+anywhere
+HERE DataLoadingJob: loadcache/DelayedDataFrame/A/SequenceAnnotator/sequence DataLoadingJob: loadcache/DelayedDataFrame/A/calc
+there
+anywhere
+log level 40
+2021-06-14 15:23:01.495 | ERROR    | mbf_genomics.delayeddataframe:load:709 - retreiving for event  from A ['sequence'] - available Index(['a', 'b', 'c'], dtype='object')  140093457042688
+2021-06-14 15:23:01.514 | ERROR    | pypipegraph2.runner:_handle_job_failed:912 - Failed after 1.0s: [bold]cache/DelayedDataFrame/event/sequence[/bold]. Exception (incl. locals) logged to .ppg/errors/2021-06-14_15-23-00.278131/25_exception.txt
+2021-06-14 15:23:01.517 | ERROR    | pypipegraph2.runner:_handle_job_failed:918 - [bold]Exception[/bold]: [red][bold]KeyError[/bold] "None of [Index(['sequence'], dtype='object')] are in the [columns]"[/red]
+[bold]Traceback[/bold] (most recent call last):
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/runner.py":1057, in _executing_thread
+	  1054                         log_trace(f"\tExecuting {{job_id}}")
+	  1055 
+	> 1056                         outputs = job.run(self, job_state.historical_output)
+	  1057                         if os.getcwd() != cwd:
+	  1058                             os.chdir(
+	  1059                                 cwd
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":412, in run
+	  409             # now output. reuse code from if self.first_output
+	  410             assert self.first_output  # paranoia
+	> 411             return self.run(
+	  412                 runner, historical_output
+	  413             )  # recurse and go into output available case
+	  414 
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":390, in run
+	  387                 return result  # translate parent outputs ot my outputs
+	  388             else:
+	> 389                 raise res
+	  390         else:
+	  391             if self.lock.acquire(blocking=False):
+	  392                 # we are the first
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":399, in run
+	  396                         k[len(self.job_id) :]: v for (k, v) in historical_output.items()
+	  397                     }}
+	> 398                     result = self.parent_job.run(runner, modified_historical_output)
+	  399                     self.first_output.append((True, result))
+	  400                 except Exception as e:
+	  401                     self.first_output.append((False, e))
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":1546, in run
+	  1543 
+	  1544     def run(self, runner, historical_output):
+	> 1545         self.load_function()
+	  1546 
+	  1547         log_trace(
+	  1548             f"dl {{self.job_id}} - historical: {{historical_output.get(self.outputs[0], False)}}"
+/home/finkernagel/upstream/imtmarburg/mbf_genomics/src/mbf_genomics/delayeddataframe.py":713, in load
+	  710                 [
+	  711                     self.ddf.df,
+	> 712                     self.ddf.parent.df[anno.columns].reindex(self.ddf.df.index),
+	  713                 ],
+	  714                 axis=1,
+	  715             )
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/frame.py":2908, in __getitem__
+	  2905             if is_iterator(key):
+	  2906                 key = list(key)
+	> 2907             indexer = self.loc._get_listlike_indexer(key, axis=1, raise_missing=True)[1]
+	  2908 
+	  2909         # take() does not accept boolean indexers
+	  2910         if getattr(indexer, "dtype", None) == bool:
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/indexing.py":1254, in _get_listlike_indexer
+	  1251             keyarr, indexer, new_indexer = ax._reindex_non_unique(keyarr)
+	  1252 
+	> 1253         self._validate_read_indexer(keyarr, indexer, axis, raise_missing=raise_missing)
+	  1254         return keyarr, indexer
+	  1255 
+	  1256     def _validate_read_indexer(
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/indexing.py":1298, in _validate_read_indexer
+	  1295             if missing == len(indexer):
+	  1296                 axis_name = self.obj._get_axis_name(axis)
+	> 1297                 raise KeyError(f"None of [{{key}}] are in the [{{axis_name}}]")
+	  1298 
+	  1299             # We (temporarily) allow for some missing keys with .loc, except in
+	  1300             # some cases (e.g. setting) in which "raise_missing" will be False
+[bold]Exception[/bold] (repeated from above): [red][bold]KeyError[/bold] "None of [Index(['sequence'], dtype='object')] are in the [columns]"[/red]
+2021-06-14 15:23:01.520 | ERROR    | mbf_genomics.delayeddataframe:load:766 - added to A Index(['sequence'], dtype='object') Index(['a', 'b', 'c', 'sequence'], dtype='object') 140093456849456 140093457042688
+2021-06-14 15:23:01.538 | ERROR    | pypipegraph2.runner:_handle_job_failed:912 - Failed after 0.012s: [bold]cache/DelayedDataFrame/event/sequence[/bold]. Exception (incl. locals) logged to .ppg/errors/2021-06-14_15-23-00.278131/25_exception.txt
+2021-06-14 15:23:01.543 | ERROR    | pypipegraph2.runner:_handle_job_failed:918 - [bold]Exception[/bold]: [red][bold]KeyError[/bold] "None of [Index(['sequence'], dtype='object')] are in the [columns]"[/red]
+[bold]Traceback[/bold] (most recent call last):
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/runner.py":1057, in _executing_thread
+	  1054                         log_trace(f"\tExecuting {{job_id}}")
+	  1055 
+	> 1056                         outputs = job.run(self, job_state.historical_output)
+	  1057                         if os.getcwd() != cwd:
+	  1058                             os.chdir(
+	  1059                                 cwd
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":390, in run
+	  387                 return result  # translate parent outputs ot my outputs
+	  388             else:
+	> 389                 raise res
+	  390         else:
+	  391             if self.lock.acquire(blocking=False):
+	  392                 # we are the first
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/runner.py":1057, in _executing_thread
+	  1054                         log_trace(f"\tExecuting {{job_id}}")
+	  1055 
+	> 1056                         outputs = job.run(self, job_state.historical_output)
+	  1057                         if os.getcwd() != cwd:
+	  1058                             os.chdir(
+	  1059                                 cwd
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":412, in run
+	  409             # now output. reuse code from if self.first_output
+	  410             assert self.first_output  # paranoia
+	> 411             return self.run(
+	  412                 runner, historical_output
+	  413             )  # recurse and go into output available case
+	  414 
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":390, in run
+	  387                 return result  # translate parent outputs ot my outputs
+	  388             else:
+	> 389                 raise res
+	  390         else:
+	  391             if self.lock.acquire(blocking=False):
+	  392                 # we are the first
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":399, in run
+	  396                         k[len(self.job_id) :]: v for (k, v) in historical_output.items()
+	  397                     }}
+	> 398                     result = self.parent_job.run(runner, modified_historical_output)
+	  399                     self.first_output.append((True, result))
+	  400                 except Exception as e:
+	  401                     self.first_output.append((False, e))
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":1546, in run
+	  1543 
+	  1544     def run(self, runner, historical_output):
+	> 1545         self.load_function()
+	  1546 
+	  1547         log_trace(
+	  1548             f"dl {{self.job_id}} - historical: {{historical_output.get(self.outputs[0], False)}}"
+/home/finkernagel/upstream/imtmarburg/mbf_genomics/src/mbf_genomics/delayeddataframe.py":713, in load
+	  710                 [
+	  711                     self.ddf.df,
+	> 712                     self.ddf.parent.df[anno.columns].reindex(self.ddf.df.index),
+	  713                 ],
+	  714                 axis=1,
+	  715             )
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/frame.py":2908, in __getitem__
+	  2905             if is_iterator(key):
+	  2906                 key = list(key)
+	> 2907             indexer = self.loc._get_listlike_indexer(key, axis=1, raise_missing=True)[1]
+	  2908 
+	  2909         # take() does not accept boolean indexers
+	  2910         if getattr(indexer, "dtype", None) == bool:
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/indexing.py":1254, in _get_listlike_indexer
+	  1251             keyarr, indexer, new_indexer = ax._reindex_non_unique(keyarr)
+	  1252 
+	> 1253         self._validate_read_indexer(keyarr, indexer, axis, raise_missing=raise_missing)
+	  1254         return keyarr, indexer
+	  1255 
+	  1256     def _validate_read_indexer(
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/indexing.py":1298, in _validate_read_indexer
+	  1295             if missing == len(indexer):
+	  1296                 axis_name = self.obj._get_axis_name(axis)
+	> 1297                 raise KeyError(f"None of [{{key}}] are in the [{{axis_name}}]")
+	  1298 
+	  1299             # We (temporarily) allow for some missing keys with .loc, except in
+	  1300             # some cases (e.g. setting) in which "raise_missing" will be False
+[bold]Exception[/bold] (repeated from above): [red][bold]KeyError[/bold] "None of [Index(['sequence'], dtype='object')] are in the [columns]"[/red]
+----------------------------- Captured stderr call -----------------------------
+ℹ️ INFO     | graph:       162 | Run is go 140095261144896 pid: 332772, run_id 0
+🐍 JobTrace | runner:      878 | FIDelayedDataFrame_A_load is ready to run -> que
+🐍 JobTrace | runner:      878 | FIDelayedDataFrame_event2_filter is ready to run -> que
+🐍 JobTrace | runner:      878 | FIDelayedDataFrame_event2_load is ready to run -> que
+🐍 JobTrace | runner:      878 | FIDelayedDataFrame_event_filter is ready to run -> que
+🐍 JobTrace | runner:      878 | FIDelayedDataFrame_event_load is ready to run -> que
+🐍 JobTrace | runner:      878 | FIcache/DelayedDataFrame/A/SequenceAnnotator/sequence is ready to run -> que
+🐍 JobTrace | runner:      878 | FIcache/DelayedDataFrame/A/calc is ready to run -> que
+🐍 JobTrace | runner:      878 | FIcache/DelayedDataFrame/A/sequence_calc_func is ready to run -> que
+🐍 JobTrace | runner:      878 | FIcache/DelayedDataFrame/event/calc is ready to run -> que
+🐍 JobTrace | runner:      878 | FIcache/DelayedDataFrame/event/sequence is ready to run -> que
+🐍 JobTrace | runner:      878 | FIcache/DelayedDataFrame/event/sequence_funcv is ready to run -> que
+🐍 JobTrace | runner:      878 | FIcache/DelayedDataFrame/event2/calc is ready to run -> que
+🐍 JobTrace | runner:      878 | FIcache/DelayedDataFrame/event2/sequence is ready to run -> que
+🐍 JobTrace | runner:      878 | FIcache/DelayedDataFrame/event2/sequence_funcv is ready to run -> que
+🐍 JobTrace | runner:      878 | FIloadcache/DelayedDataFrame/A/SequenceAnnotator/sequence is ready to run -> que
+🐍 JobTrace | runner:      878 | FIloadcache/DelayedDataFrame/A/calc is ready to run -> que
+🐍 JobTrace | runner:      878 | FIloadcache/DelayedDataFrame/event/calc is ready to run -> que
+🐍 JobTrace | runner:      878 | FIloadcache/DelayedDataFrame/event2/calc is ready to run -> que
+🐍 JobTrace | runner:      878 | PIDelayedDataFrame_event2_parent is ready to run -> que
+🐍 JobTrace | runner:      878 | PIDelayedDataFrame_event_parent is ready to run -> que
+🐍 JobTrace | runner:      878 | _DownstreamNeedsMeChecker_(CJC:cache/DelayedDataFrame/event/sequence:force_load) is ready to run -> que
+🐍 JobTrace | runner:      878 | _DownstreamNeedsMeChecker_(CJC:cache/DelayedDataFrame/event2/sequence) is ready to run -> que
+🐍 JobTrace | runner:      878 | _DownstreamNeedsMeChecker_(CJC:loadcache/DelayedDataFrame/A/SequenceAnnotator/sequence) is ready to run -> que
+🐍 JobTrace | runner:      878 | _DownstreamNeedsMeChecker_cache/DelayedDataFrame/A/SequenceAnnotator/sequence is ready to run -> que
+🐍 JobTrace | runner:      878 | _DownstreamNeedsMeChecker_cache/DelayedDataFrame/event/calc is ready to run -> que
+🐍 JobTrace | runner:      878 | _DownstreamNeedsMeChecker_cache/DelayedDataFrame/event2/calc is ready to run -> que
+🐍 JobTrace | runner:      878 | _DownstreamNeedsMeChecker_force_load is ready to run -> que
+🐍 JobTrace | runner:      674 | FIDelayedDataFrame_A_load success
+🐍 JobTrace | runner:      674 | FIDelayedDataFrame_event2_filter success
+🐍 JobTrace | runner:      674 | FIDelayedDataFrame_event2_load success
+🐍 JobTrace | runner:      674 | FIDelayedDataFrame_event_filter success
+🐍 JobTrace | runner:      674 | FIDelayedDataFrame_event_load success
+🐍 JobTrace | runner:      674 | FIcache/DelayedDataFrame/A/SequenceAnnotator/sequence success
+🐍 JobTrace | runner:      674 | FIcache/DelayedDataFrame/A/calc success
+🐍 JobTrace | runner:      674 | FIcache/DelayedDataFrame/A/sequence_calc_func success
+🐍 JobTrace | runner:      674 | FIcache/DelayedDataFrame/event/calc success
+🐍 JobTrace | runner:      878 | cache/DelayedDataFrame/A/calc is ready to run -> que
+🐍 JobTrace | runner:      674 | FIcache/DelayedDataFrame/event/sequence success
+🐍 JobTrace | runner:      674 | FIcache/DelayedDataFrame/event/sequence_funcv success
+🐍 JobTrace | runner:      674 | FIcache/DelayedDataFrame/event2/calc success
+🐍 JobTrace | runner:      674 | FIcache/DelayedDataFrame/event2/sequence success
+🐍 JobTrace | runner:      674 | FIcache/DelayedDataFrame/event2/sequence_funcv success
+🐍 JobTrace | runner:      674 | FIloadcache/DelayedDataFrame/A/SequenceAnnotator/sequence success
+🐍 JobTrace | runner:      674 | FIloadcache/DelayedDataFrame/A/calc success
+🐍 JobTrace | runner:      674 | FIloadcache/DelayedDataFrame/event/calc success
+🐍 JobTrace | runner:      674 | FIloadcache/DelayedDataFrame/event2/calc success
+🐍 JobTrace | runner:      674 | PIDelayedDataFrame_event2_parent success
+🐍 JobTrace | runner:      674 | PIDelayedDataFrame_event_parent success
+🐍 JobTrace | runner:      674 | _DownstreamNeedsMeChecker_(CJC:cache/DelayedDataFrame/event/sequence:force_load) success
+🐍 JobTrace | runner:      674 | _DownstreamNeedsMeChecker_(CJC:cache/DelayedDataFrame/event2/sequence) success
+🐍 JobTrace | runner:      674 | _DownstreamNeedsMeChecker_(CJC:loadcache/DelayedDataFrame/A/SequenceAnnotator/sequence) success
+🐍 JobTrace | runner:      674 | _DownstreamNeedsMeChecker_cache/DelayedDataFrame/A/SequenceAnnotator/sequence success
+🐍 JobTrace | runner:      674 | _DownstreamNeedsMeChecker_cache/DelayedDataFrame/event/calc success
+🐍 JobTrace | runner:      674 | _DownstreamNeedsMeChecker_cache/DelayedDataFrame/event2/calc success
+🐍 JobTrace | runner:      674 | _DownstreamNeedsMeChecker_force_load success
+🐍 JobTrace | runner:      674 | cache/DelayedDataFrame/A/calc success
+🐍 JobTrace | runner:      878 | (CJC:loadcache/DelayedDataFrame/A/calc:cache/DelayedDataFrame/event/calc) is ready to run -> que
+🐍 JobTrace | runner:      878 | (CJC:loadcache/DelayedDataFrame/A/calc:cache/DelayedDataFrame/A/SequenceAnnotator/sequence) is ready to run -> que
+🐍 JobTrace | runner:      674 | (CJC:loadcache/DelayedDataFrame/A/calc:cache/DelayedDataFrame/event/calc) success
+🐍 JobTrace | runner:      674 | (CJC:loadcache/DelayedDataFrame/A/calc:cache/DelayedDataFrame/A/SequenceAnnotator/sequence) success
+🐍 JobTrace | runner:      878 | cache/DelayedDataFrame/event/calc is ready to run -> que
+🐍 JobTrace | runner:      878 | cache/DelayedDataFrame/A/SequenceAnnotator/sequence is ready to run -> que
+🐍 JobTrace | runner:      674 | cache/DelayedDataFrame/event/calc success
+🐍 JobTrace | runner:      878 | (CJC:loadcache/DelayedDataFrame/event/calc:cache/DelayedDataFrame/event2/calc) is ready to run -> que
+🐍 JobTrace | runner:      674 | cache/DelayedDataFrame/A/SequenceAnnotator/sequence success
+🐍 JobTrace | runner:      674 | (CJC:loadcache/DelayedDataFrame/event/calc:cache/DelayedDataFrame/event2/calc) success
+🐍 JobTrace | runner:      878 | cache/DelayedDataFrame/event2/calc is ready to run -> que
+🐍 JobTrace | runner:      674 | cache/DelayedDataFrame/event2/calc success
+🐍 JobTrace | runner:      878 | (CJC:loadcache/DelayedDataFrame/event2/calc) is ready to run -> que
+🐍 JobTrace | runner:      878 | (CJC:cache/DelayedDataFrame/event/sequence:(CJC:cache/DelayedDataFrame/event2/sequence)) is ready to run -> que
+🐍 JobTrace | runner:      878 | (CJC:loadcache/DelayedDataFrame/event/calc:(CJC:cache/DelayedDataFrame/event/sequence:force_load)) is ready to run -> que
+🐍 JobTrace | runner:      878 | (CJC:loadcache/DelayedDataFrame/A/calc:(CJC:loadcache/DelayedDataFrame/A/SequenceAnnotator/sequence)) is ready to run -> que
+🐍 JobTrace | runner:      674 | (CJC:loadcache/DelayedDataFrame/event2/calc) success
+❌ ERROR    | delayeddataframe: 709 | retreiving for event  from A ['sequence'] - available Index(['a', 'b', 'c'], dtype='object')  140093457042688
+🐍 JobTrace | runner:      883 | (CJC:cache/DelayedDataFrame/event/sequence:(CJC:cache/DelayedDataFrame/event2/sequence)) failed
+❌ ERROR    | runner:      912 | Failed after 1.0s: [bold]cache/DelayedDataFrame/event/sequence[/bold]. Exception (incl. locals) logged to .ppg/errors/2021-06-14_15-23-00.278131/25_exception.txt
+❌ ERROR    | runner:      918 | [bold]Exception[/bold]: [red][bold]KeyError[/bold] "None of [Index(['sequence'], dtype='object')] are in the [columns]"[/red]
+[bold]Traceback[/bold] (most recent call last):
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/runner.py":1057, in _executing_thread
+	  1054                         log_trace(f"\tExecuting {job_id}")
+	  1055 
+	> 1056                         outputs = job.run(self, job_state.historical_output)
+	  1057                         if os.getcwd() != cwd:
+	  1058                             os.chdir(
+	  1059                                 cwd
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":412, in run
+	  409             # now output. reuse code from if self.first_output
+	  410             assert self.first_output  # paranoia
+	> 411             return self.run(
+	  412                 runner, historical_output
+	  413             )  # recurse and go into output available case
+	  414 
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":390, in run
+	  387                 return result  # translate parent outputs ot my outputs
+	  388             else:
+	> 389                 raise res
+	  390         else:
+	  391             if self.lock.acquire(blocking=False):
+	  392                 # we are the first
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":399, in run
+	  396                         k[len(self.job_id) :]: v for (k, v) in historical_output.items()
+	  397                     }
+	> 398                     result = self.parent_job.run(runner, modified_historical_output)
+	  399                     self.first_output.append((True, result))
+	  400                 except Exception as e:
+	  401                     self.first_output.append((False, e))
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":1546, in run
+	  1543 
+	  1544     def run(self, runner, historical_output):
+	> 1545         self.load_function()
+	  1546 
+	  1547         log_trace(
+	  1548             f"dl {self.job_id} - historical: {historical_output.get(self.outputs[0], False)}"
+/home/finkernagel/upstream/imtmarburg/mbf_genomics/src/mbf_genomics/delayeddataframe.py":713, in load
+	  710                 [
+	  711                     self.ddf.df,
+	> 712                     self.ddf.parent.df[anno.columns].reindex(self.ddf.df.index),
+	  713                 ],
+	  714                 axis=1,
+	  715             )
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/frame.py":2908, in __getitem__
+	  2905             if is_iterator(key):
+	  2906                 key = list(key)
+	> 2907             indexer = self.loc._get_listlike_indexer(key, axis=1, raise_missing=True)[1]
+	  2908 
+	  2909         # take() does not accept boolean indexers
+	  2910         if getattr(indexer, "dtype", None) == bool:
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/indexing.py":1254, in _get_listlike_indexer
+	  1251             keyarr, indexer, new_indexer = ax._reindex_non_unique(keyarr)
+	  1252 
+	> 1253         self._validate_read_indexer(keyarr, indexer, axis, raise_missing=raise_missing)
+	  1254         return keyarr, indexer
+	  1255 
+	  1256     def _validate_read_indexer(
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/indexing.py":1298, in _validate_read_indexer
+	  1295             if missing == len(indexer):
+	  1296                 axis_name = self.obj._get_axis_name(axis)
+	> 1297                 raise KeyError(f"None of [{key}] are in the [{axis_name}]")
+	  1298 
+	  1299             # We (temporarily) allow for some missing keys with .loc, except in
+	  1300             # some cases (e.g. setting) in which "raise_missing" will be False
+[bold]Exception[/bold] (repeated from above): [red][bold]KeyError[/bold] "None of [Index(['sequence'], dtype='object')] are in the [columns]"[/red]
+🐍 JobTrace | runner:      674 | (CJC:loadcache/DelayedDataFrame/event/calc:(CJC:cache/DelayedDataFrame/event/sequence:force_load)) success
+🐍 JobTrace | runner:      674 | (CJC:loadcache/DelayedDataFrame/A/calc:(CJC:loadcache/DelayedDataFrame/A/SequenceAnnotator/sequence)) success
+🐍 JobTrace | runner:      878 | (CJC:loadcache/DelayedDataFrame/A/SequenceAnnotator/sequence) is ready to run -> que
+❌ ERROR    | delayeddataframe: 766 | added to A Index(['sequence'], dtype='object') Index(['a', 'b', 'c', 'sequence'], dtype='object') 140093456849456 140093457042688
+🐍 JobTrace | runner:      674 | (CJC:loadcache/DelayedDataFrame/A/SequenceAnnotator/sequence) success
+🐍 JobTrace | runner:      878 | (CJC:cache/DelayedDataFrame/event/sequence:force_load) is ready to run -> que
+🐍 JobTrace | runner:      883 | (CJC:cache/DelayedDataFrame/event/sequence:force_load) failed
+❌ ERROR    | runner:      912 | Failed after 0.012s: [bold]cache/DelayedDataFrame/event/sequence[/bold]. Exception (incl. locals) logged to .ppg/errors/2021-06-14_15-23-00.278131/25_exception.txt
+❌ ERROR    | runner:      918 | [bold]Exception[/bold]: [red][bold]KeyError[/bold] "None of [Index(['sequence'], dtype='object')] are in the [columns]"[/red]
+[bold]Traceback[/bold] (most recent call last):
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/runner.py":1057, in _executing_thread
+	  1054                         log_trace(f"\tExecuting {job_id}")
+	  1055 
+	> 1056                         outputs = job.run(self, job_state.historical_output)
+	  1057                         if os.getcwd() != cwd:
+	  1058                             os.chdir(
+	  1059                                 cwd
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":390, in run
+	  387                 return result  # translate parent outputs ot my outputs
+	  388             else:
+	> 389                 raise res
+	  390         else:
+	  391             if self.lock.acquire(blocking=False):
+	  392                 # we are the first
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/runner.py":1057, in _executing_thread
+	  1054                         log_trace(f"\tExecuting {job_id}")
+	  1055 
+	> 1056                         outputs = job.run(self, job_state.historical_output)
+	  1057                         if os.getcwd() != cwd:
+	  1058                             os.chdir(
+	  1059                                 cwd
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":412, in run
+	  409             # now output. reuse code from if self.first_output
+	  410             assert self.first_output  # paranoia
+	> 411             return self.run(
+	  412                 runner, historical_output
+	  413             )  # recurse and go into output available case
+	  414 
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":390, in run
+	  387                 return result  # translate parent outputs ot my outputs
+	  388             else:
+	> 389                 raise res
+	  390         else:
+	  391             if self.lock.acquire(blocking=False):
+	  392                 # we are the first
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":399, in run
+	  396                         k[len(self.job_id) :]: v for (k, v) in historical_output.items()
+	  397                     }
+	> 398                     result = self.parent_job.run(runner, modified_historical_output)
+	  399                     self.first_output.append((True, result))
+	  400                 except Exception as e:
+	  401                     self.first_output.append((False, e))
+/home/finkernagel/upstream/pypipegraph2/src/pypipegraph2/jobs.py":1546, in run
+	  1543 
+	  1544     def run(self, runner, historical_output):
+	> 1545         self.load_function()
+	  1546 
+	  1547         log_trace(
+	  1548             f"dl {self.job_id} - historical: {historical_output.get(self.outputs[0], False)}"
+/home/finkernagel/upstream/imtmarburg/mbf_genomics/src/mbf_genomics/delayeddataframe.py":713, in load
+	  710                 [
+	  711                     self.ddf.df,
+	> 712                     self.ddf.parent.df[anno.columns].reindex(self.ddf.df.index),
+	  713                 ],
+	  714                 axis=1,
+	  715             )
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/frame.py":2908, in __getitem__
+	  2905             if is_iterator(key):
+	  2906                 key = list(key)
+	> 2907             indexer = self.loc._get_listlike_indexer(key, axis=1, raise_missing=True)[1]
+	  2908 
+	  2909         # take() does not accept boolean indexers
+	  2910         if getattr(indexer, "dtype", None) == bool:
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/indexing.py":1254, in _get_listlike_indexer
+	  1251             keyarr, indexer, new_indexer = ax._reindex_non_unique(keyarr)
+	  1252 
+	> 1253         self._validate_read_indexer(keyarr, indexer, axis, raise_missing=raise_missing)
+	  1254         return keyarr, indexer
+	  1255 
+	  1256     def _validate_read_indexer(
+/home/finkernagel/upstream/dev/lib/python3.8/site-packages/pandas/core/indexing.py":1298, in _validate_read_indexer
+	  1295             if missing == len(indexer):
+	  1296                 axis_name = self.obj._get_axis_name(axis)
+	> 1297                 raise KeyError(f"None of [{key}] are in the [{axis_name}]")
+	  1298 
+	  1299             # We (temporarily) allow for some missing keys with .loc, except in
+	  1300             # some cases (e.g. setting) in which "raise_missing" will be False
+[bold]Exception[/bold] (repeated from above): [red][bold]KeyError[/bold] "None of [Index(['sequence'], dtype='object')] are in the [columns]"[/red]
+ℹ️ INFO     | graph:       225 | Run is done
+=============================== warnings summary ===============================
+../../dev/lib/python3.8/site-packages/patsy/constraint.py:13
+  /home/finkernagel/upstream/dev/lib/python3.8/site-packages/patsy/constraint.py:13: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+
+-- Docs: https://docs.pytest.org/en/stable/warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_annotatable.py::Test_FromOldGenomics::test_annotator_copying_on_filter_two_deep
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+================= 1 failed, 467 deselected, 1 warning in 1.64s =================

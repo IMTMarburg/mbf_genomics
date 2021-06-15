@@ -21,7 +21,9 @@ def DummyAnnotatable(name):
 
 
 def force_load(ddf):
-    ppg.JobGeneratingJob("shu", lambda: 55).depends_on(ddf.annotate())
+    up = ddf.annotate()
+    print(ddf.name, up)
+    return ppg.JobGeneratingJob("force_load", lambda: 55, depend_on_function = False).depends_on(up)
 
 
 class SequenceAnnotator(Annotator):
@@ -110,7 +112,9 @@ class Test_FromOldGenomics:
         with pytest.raises(TypeError):
             a += FakeAnnotator()
 
-    def test_one_column_annotator(self):
+    def test_one_column_annotator(self, job_trace_log, new_pipegraph):
+        #new_pipegraph.new(log_level=6)
+        import pypipegraph2 as ppg2
         a = DummyAnnotatable("A")
         anno = SequenceAnnotator()
         a.add_annotator(anno)
@@ -150,7 +154,9 @@ class Test_FromOldGenomics:
         assert (even.df["b"] == [2, 4]).all()
         assert (even.df["sequence"] == [1, 3]).all()
 
-    def test_annotator_copying_on_filter_two_deep(self):
+    def test_annotator_copying_on_filter_two_deep(self, new_pipegraph, job_trace_log):
+        new_pipegraph.new()
+
         a = DummyAnnotatable("A")
         anno = SequenceAnnotator()
         even = a.filter("event", lambda df: df["b"] % 2 == 0)
@@ -158,7 +164,9 @@ class Test_FromOldGenomics:
         second = even.filter("event2", lambda df: df["b"] == 4)
         a.add_annotator(anno)
         force_load(second)
-        ppg.run_pipegraph()
+        import pypipegraph2 as ppg2
+        #ppg.run_pipegraph
+        ppg2.run(dump_graphml=True)
         assert (second.df["b"] == [4]).all()
         assert (second.df["sequence"] == [3]).all()
 
@@ -262,12 +270,11 @@ class Test_FromOldGenomics:
         even = a.filter("event", lambda df: df["b"] % 2 == 0)
         even.add_annotator(anno)
         force_load(even)
-
         a.add_annotator(anno)
         force_load(a)
         ppg.run_pipegraph()
-        assert "sequence" in even.df
-        assert "sequence" in a.df
+        assert "sequence" in a.df.columns
+        assert "sequence" in even.df.columns
 
     def test_annotator_added_after_filtering(self):
         a = DummyAnnotatable("A")

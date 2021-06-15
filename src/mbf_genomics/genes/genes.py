@@ -74,7 +74,7 @@ class Genes(GenomicRegions):
                 result_dir = result_dir or Path("results") / "Genes" / sheet_name / name
             else:
                 result_dir = result_dir or Path("results") / "Genes" / name
-            result_dir = Path(result_dir).absolute()
+            # result_dir = Path(result_dir).absolute() # must not be absolute in ppg2
 
             self.column_properties = {
                 "chr": {
@@ -180,10 +180,10 @@ class Genes(GenomicRegions):
             for chr in df["chr"]:
                 if not chr in allowed_chromosomes:
                     raise ValueError(
-                        "Invalid chromosome found when loading %s: '%s', expected one of: %s\nLoading func was %s"
+                        "Invalid chromosome found when loading %s: %s, expected one of: %s\nLoading func was %s"
                         % (
                             self.name,
-                            chr,
+                            repr(chr),
                             sorted(allowed_chromosomes),
                             self.genes_load_func,
                         )

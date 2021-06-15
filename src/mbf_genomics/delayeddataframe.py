@@ -394,7 +394,7 @@ class DelayedDataFrame(object):
         """
         output_filename = self.pathify(
             output_filename, self.get_table_filename().absolute()
-        )
+        ).relative_to(Path('.').absolute())
 
         def write(output_filename):
             if mangler_function:
@@ -435,7 +435,8 @@ class DelayedDataFrame(object):
         return self.load_strategy.generate_file(output_filename, write, deps)
 
     def plot(self, output_filename, plot_func, calc_func=None, annotators=None):
-        output_filename = self.pathify(output_filename)
+        output_filename = self.pathify(output_filename).relative_to(Path('.').absolute())
+
 
         def do_plot(output_filename=output_filename):
             df = self.df
@@ -489,7 +490,7 @@ def _combine_annotator_df_and_old_df(a_df, ddf_df):
     new_df = pd.concat([ddf_df, a_df], axis=1)
     if len(new_df) != len(ddf_df):
         raise ValueError(
-            "Index mismatch between DataFrame and Annotator result concating added %i rows- "
+            "Index mismatch between DataFrame and Annotator result concatenating added %i rows- "
             % (len(new_df) - len(ddf_df))
             + "Annotator must return either a DF with a compatible index "
             "or one with a RangeIndex(0,len(df))"
@@ -701,6 +702,12 @@ class Load_PPG:
 
     def _anno_load(self, anno):
         def load():
+            import os
+
+            import pypipegraph2 as ppg2
+            import time
+            time.sleep(1)
+            ppg2.util.log_error(f"retreiving for {self.ddf.name}  from {self.ddf.parent.name} {anno.columns} - available {self.ddf.parent.df.columns}  {id(self.ddf.parent.df)}")
             self.ddf.df = pd.concat(
                 [
                     self.ddf.df,
@@ -753,7 +760,11 @@ class Load_PPG:
                     anno.get_cache_name(),
                     set(df.columns).intersection(self.ddf.df.columns),
                 )
+            import pypipegraph2 as ppg2
+            import os
+            old_id = id(self.ddf.df)
             self.ddf.df = _combine_annotator_df_and_old_df(df, self.ddf.df)
+            ppg2.util.log_error(f"added to {self.ddf.name} {df.columns} {self.ddf.df.columns} {id(self.ddf.df)} {old_id}")
 
         (self.ddf.cache_dir / anno.__class__.__name__).mkdir(exist_ok=True)
         job = ppg.CachedDataLoadingJob(
@@ -761,9 +772,11 @@ class Load_PPG:
             calc,
             load,
         )
+        print("HERE", job, self.load())
         ppg.Job.depends_on(
             job, self.load()
-        )  # both the load and nthe calc needs our ddf.df
+        )  # both the load and the calc needs our ddf.df
+        print('there')
         job.depends_on(
             self.load(),
             ppg.FunctionInvariant(
@@ -771,6 +784,7 @@ class Load_PPG:
                 anno.calc if hasattr(anno, "calc") else anno.calc_ddf,
             ),
         )
+        print('anywhere')
         for d in anno.dep_annos():
             if d is not None:
                 job.depends_on(self.ddf.anno_jobs[d.get_cache_name()])

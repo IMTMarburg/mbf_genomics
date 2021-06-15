@@ -51,7 +51,7 @@ class Test_DelayedDataFrameDirect:
         assert_frame_equal(a.df, test_df)
         assert a.non_annotator_columns == "A"
         fn = a.write()[1]
-        assert "/sha" in str(fn.parent)
+        assert "/sha" in str(fn.parent.absolute())
         assert fn.exists()
         assert_frame_equal(pd.read_csv(fn, sep="\t"), test_df)
 
@@ -646,7 +646,7 @@ class Test_DelayedDataFrameBoth:
 
 @pytest.mark.usefixtures("new_pipegraph")
 class Test_DelayedDataFramePPG:
-    def test_create(self):
+    def test_create(self, job_trace_log):
         test_df = pd.DataFrame({"A": [1, 2]})
 
         def load():
@@ -654,8 +654,9 @@ class Test_DelayedDataFramePPG:
 
         a = DelayedDataFrame("shu", load)
         assert not hasattr(a, "df")
+        print('load is', a.load())
         force_load(a.load(), False)
-        ppg.run_pipegraph()
+        ppg.run_pipegraph(dump_graphml=True)
         assert_frame_equal(a.df, test_df)
         assert a.non_annotator_columns == "A"
 
@@ -683,8 +684,17 @@ class Test_DelayedDataFramePPG:
         def b(df):
             return df.head()
 
-        with pytest.raises(ppg.JobContractError):
+        ok = False
+        try:
             a.write(mangler_function=b)
+        except Exception as e:
+            se = str(type(e))
+            if 'JobContractError' in se: # ppg
+                ok = True
+            elif 'JobRedefinitionError' in se: # ppg2
+                ok = True
+        if not ok:
+            raise ValueError("Did not raise the expected exception")
 
     def test_annotator_basic(self):
         a = DelayedDataFrame(

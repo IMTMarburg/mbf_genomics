@@ -1412,16 +1412,16 @@ class TestQC:
         run_pipegraph()
         qc_jobs = list(get_qc_jobs())
         qc_jobs = [x for x in qc_jobs if not x._pruned]
-        assert len(qc_jobs) == 4  # three from our annos, one gene_unsrtanded for
-        cpm_job = [x for x in qc_jobs if "CPM" in x.filenames[0]][0]
-        tpm_job = [x for x in qc_jobs if "TPM" in x.filenames[0]][0]
+        assert len(qc_jobs) == 4  # three from our annos, one gene_unstranded for
+        cpm_job = [x for x in qc_jobs if "CPM" in str(x.filenames[0])][0]
+        tpm_job = [x for x in qc_jobs if "TPM" in str(x.filenames[0])][0]
         raw_job = [
             x
             for x in qc_jobs
             if (
-                not "TPM" in x.filenames[0]
-                and not "CPM" in x.filenames[0]
-                and not "unstranded" in x.filenames[0]
+                not "TPM" in str(x.filenames[0])
+                and not "CPM" in str(x.filenames[0])
+                and not "unstranded" in str(x.filenames[0])
             )
         ][0]
         assert_image_equal(raw_job.filenames[0])

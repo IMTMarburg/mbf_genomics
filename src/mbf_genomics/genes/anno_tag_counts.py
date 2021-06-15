@@ -219,7 +219,7 @@ class TagCountCommonQC:
         output_filename = genes.result_dir / self.qc_folder / "read_distribution.png"
         output_filename.parent.mkdir(exist_ok=True)
 
-        def plot(output_filename, elements):
+        def plot(output_filename, elements, qc_distribution_scale_y_name=self.qc_distribution_scale_y_name):
             df = genes.df
             df = dp(df).select({x.aligned_lane.name: x.columns[0] for x in elements}).pd
             if len(df) == 0:
@@ -243,7 +243,7 @@ class TagCountCommonQC:
                     # can't have a log boxplot with all nans (log(0))
                     plot = plot.scale_y_continuous(
                         trans="log10",
-                        name=self.qc_distribution_scale_y_name,
+                        name=qc_distribution_scale_y_name,
                         breaks=[1, 10, 100, 1000, 10000, 100_000, 1e6, 1e7],
                     )
 
