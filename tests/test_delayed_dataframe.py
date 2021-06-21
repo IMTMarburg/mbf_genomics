@@ -646,7 +646,7 @@ class Test_DelayedDataFrameBoth:
 
 @pytest.mark.usefixtures("new_pipegraph")
 class Test_DelayedDataFramePPG:
-    def test_create(self, job_trace_log):
+    def test_create(self):
         test_df = pd.DataFrame({"A": [1, 2]})
 
         def load():
@@ -654,9 +654,9 @@ class Test_DelayedDataFramePPG:
 
         a = DelayedDataFrame("shu", load)
         assert not hasattr(a, "df")
-        print('load is', a.load())
+        print("load is", a.load())
         force_load(a.load(), False)
-        ppg.run_pipegraph(dump_graphml=True)
+        ppg.run_pipegraph()
         assert_frame_equal(a.df, test_df)
         assert a.non_annotator_columns == "A"
 
@@ -689,9 +689,9 @@ class Test_DelayedDataFramePPG:
             a.write(mangler_function=b)
         except Exception as e:
             se = str(type(e))
-            if 'JobContractError' in se: # ppg
+            if "JobContractError" in se:  # ppg
                 ok = True
-            elif 'JobRedefinitionError' in se: # ppg2
+            elif "JobRedefinitionError" in se:  # ppg2
                 ok = True
         if not ok:
             raise ValueError("Did not raise the expected exception")

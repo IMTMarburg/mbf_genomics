@@ -13,7 +13,7 @@ from mbf_genomics.testing import MockGenome  # noqa: F401
 ppg_genome = None
 
 
-def get_genome(name=None):
+def get_genome(name='get_genome_genome'):
     global ppg_genome
     cache_dir = Path(__file__).parent / "run" / "genome_cache"
     if ppg_genome is None:
@@ -38,7 +38,10 @@ def get_genome(name=None):
     )
 
 
-def get_genome_chr_length(chr_lengths=None, name=None):
+def get_genome_chr_length(chr_lengths=None, genome=None):
+    if not genome:
+        genome = get_genome()
+        # raise ValueError("pass in a genome")
     if chr_lengths is None:
         chr_lengths = {
             "1": 100_000,
@@ -47,7 +50,9 @@ def get_genome_chr_length(chr_lengths=None, name=None):
             "4": 400_000,
             "5": 500_000,
         }
-    genome = get_genome(name + "_chr" if name else "dummy_genome_chr")
+    if not isinstance(chr_lengths, dict):
+        raise TypeError()
+    genome = genome
     genome.get_chromosome_lengths = lambda: chr_lengths
     return genome
 

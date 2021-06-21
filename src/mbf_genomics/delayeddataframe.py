@@ -511,7 +511,7 @@ class Load_Direct:
 
     def generate_file(self, filename, write_callback, dependencies, empty_ok=False):
         write_callback(filename)
-        return None, Path(filename)
+        return None, Path(filename).absolute()
 
     def add_annotator(self, anno):
         if anno.get_cache_name() in self.ddf.annotators:
@@ -772,11 +772,9 @@ class Load_PPG:
             calc,
             load,
         )
-        print("HERE", job, self.load())
         ppg.Job.depends_on(
             job, self.load()
         )  # both the load and the calc needs our ddf.df
-        print('there')
         job.depends_on(
             self.load(),
             ppg.FunctionInvariant(
@@ -784,7 +782,6 @@ class Load_PPG:
                 anno.calc if hasattr(anno, "calc") else anno.calc_ddf,
             ),
         )
-        print('anywhere')
         for d in anno.dep_annos():
             if d is not None:
                 job.depends_on(self.ddf.anno_jobs[d.get_cache_name()])

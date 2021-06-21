@@ -21,9 +21,15 @@ def DummyAnnotatable(name):
 
 
 def force_load(ddf):
-    up = ddf.annotate()
-    print(ddf.name, up)
-    return ppg.JobGeneratingJob("force_load", lambda: 55, depend_on_function = False).depends_on(up)
+    up = [ddf.annotate()]
+    if hasattr(ppg, "is_ppg2"):
+        return ppg.JobGeneratingJob(
+            "force_load", lambda: 55, depend_on_function=False
+        ).depends_on(up)
+    else:
+        j = ppg.JobGeneratingJob("force_load", lambda: 55).depends_on(up)
+        j.ignore_code_changes()
+        return j
 
 
 class SequenceAnnotator(Annotator):
@@ -112,9 +118,8 @@ class Test_FromOldGenomics:
         with pytest.raises(TypeError):
             a += FakeAnnotator()
 
-    def test_one_column_annotator(self, job_trace_log, new_pipegraph):
-        #new_pipegraph.new(log_level=6)
-        import pypipegraph2 as ppg2
+    def test_one_column_annotator(self, new_pipegraph):
+        # new_pipegraph.new(log_level=6)
         a = DummyAnnotatable("A")
         anno = SequenceAnnotator()
         a.add_annotator(anno)
@@ -132,7 +137,7 @@ class Test_FromOldGenomics:
         assert (a.df["rev_sequenceDuo"] == [4, 3, 2, 1]).all()
 
     def test_two_differenct_annotators_with_identical_column_names_raise_on_adding(
-        self
+        self,
     ):
         a = DummyAnnotatable("A")
         anno = SequenceAnnotatorDuo()
@@ -155,20 +160,21 @@ class Test_FromOldGenomics:
         assert (even.df["sequence"] == [1, 3]).all()
 
     def test_annotator_copying_on_filter_two_deep(self, new_pipegraph, job_trace_log):
-        new_pipegraph.new()
+        if hasattr(ppg, "is_ppg2"):
+            new_pipegraph.new_pipegraph(log_level=6)
 
-        a = DummyAnnotatable("A")
-        anno = SequenceAnnotator()
-        even = a.filter("event", lambda df: df["b"] % 2 == 0)
-        force_load(even)
-        second = even.filter("event2", lambda df: df["b"] == 4)
-        a.add_annotator(anno)
-        force_load(second)
-        import pypipegraph2 as ppg2
-        #ppg.run_pipegraph
-        ppg2.run(dump_graphml=True)
-        assert (second.df["b"] == [4]).all()
-        assert (second.df["sequence"] == [3]).all()
+            a = DummyAnnotatable("A")
+            anno = SequenceAnnotator()
+            even = a.filter("event", lambda df: df["b"] % 2 == 0)
+            force_load(even)
+            second = even.filter("event2", lambda df: df["b"] == 4)
+            a.add_annotator(anno)
+            force_load(second)
+            # second.write('shu.tsv')
+
+            ppg.run_pipegraph()
+            assert (second.df["b"] == [4]).all()
+            assert (second.df["sequence"] == [3]).all()
 
     def test_annotator_copying_on_filter_with_anno(self):
         a = DummyAnnotatable("A")
@@ -357,9 +363,10 @@ class Test_FromOldGenomics:
         assert (fourth.df["parent_row"] == [3]).all()
         assert (fourth.df["shaw"] == ["d4"]).all()
         df = pd.read_csv(fn_4, sep="\t")
-        print(df)
         assert (df["shaw"] == ["d4"]).all()
-        assert_frame_equal(df, fourth.df.reset_index(drop=True), check_less_precise=2)
+        assert_frame_equal(
+            df, fourth.df.reset_index(drop=True), check_exact=False, rtol=1e-3
+        )
 
     def test_changing_anno_that_filtering_doesnt_care_about_does_not_retrigger_child_rebuild(
         self, new_pipegraph
@@ -442,7 +449,6 @@ class TestDynamicAnnotators:
         a.add_annotator(anno)
         force_load(a)
         ppg.run_pipegraph()
-        print(a.df)
         assert "DA1-A" in a.df.columns
         assert (a.df["DA1-A"] == 0).all()
 
@@ -471,7 +477,7 @@ class TestDynamicAnnotators:
         assert "DA2-C" not in a.df.columns
 
     def test_two_differenct_annotators_with_identical_column_names_raise_on_creation(
-        self
+        self,
     ):
         a = DummyAnnotatable("A")
         columns_called = [False]

@@ -46,7 +46,11 @@ class TestGenomicRegionsLoadingPPGOnly:
 
     def test_depenencies_must_be_jobs(self):
         ppg.ParameterInvariant("shu", (None,))
-        with pytest.raises(ValueError):
+        if hasattr(ppg, "is_ppg2"):
+            expected = KeyError
+        else:
+            expected = ValueError
+        with pytest.raises(expected):  # ppg2 KeyError
             regions.GenomicRegions("shu", lambda: None, ["shu"], get_genome())
 
 
@@ -170,8 +174,10 @@ class TestGenomicRegionsLoading:
         def sample_data():
             return pd.DataFrame({"chr": "1", "stop": [1100]})
 
+        g = get_genome()
+
         with RaisesDirectOrInsidePipegraph(ValueError):
-            a = regions.GenomicRegions("sha", sample_data, [], get_genome())
+            a = regions.GenomicRegions("sha", sample_data, [], g)
             force_load(a.load)
 
     def test_loading_missing_chr(self):
@@ -1171,7 +1177,7 @@ class TestFilterTestDependencies:
                 }
             )
 
-        self.genome = get_genome_chr_length()
+        self.genome = get_genome_chr_length(genome=get_genome())
         self.a = regions.GenomicRegions("shu", sample_data, [], self.genome)
 
     def test_dependecies(self):
@@ -1222,7 +1228,7 @@ class TestFilter:
                 }
             )
 
-        self.genome = get_genome_chr_length()
+        self.genome = get_genome_chr_length(genome=get_genome())
         self.a = regions.GenomicRegions("shu", sample_data, [], self.genome)
 
     def test_filtering(self):
@@ -1305,9 +1311,9 @@ class TestFilter:
 
         b = regions.GenomicRegions("b", sample_data, [], self.genome)
         c = regions.GenomicRegions_FilterToOverlapping("c", self.a, b)
-        c.write("shu.tsv")
+        c.write("shu_c.tsv")
         d = regions.GenomicRegions_FilterToOverlapping("d", self.a, [b, b])
-        d.write("shu.tsv")
+        d.write("shu_d.tsv")
         run_pipegraph()
         print("a", self.a.df)
         print("b", b.df)
@@ -1351,7 +1357,7 @@ class TestInterval:
                 }
             )
 
-        self.genome = get_genome_chr_length()
+        self.genome = get_genome_chr_length(genome=get_genome())
         self.a = regions.GenomicRegions("shu", sample_data, [], self.genome)
 
     def test_overlapping(self):
@@ -1444,7 +1450,7 @@ class TestInterval:
         def sample_data():
             return pd.DataFrame({"chr": [], "start": [], "stop": []})
 
-        b = regions.GenomicRegions("shub", sample_data, [], get_genome())
+        b = regions.GenomicRegions("shub", sample_data, [], self.genome)
         force_load(b.load())
         run_pipegraph()
         assert len(b.df) == 0
@@ -1458,7 +1464,9 @@ class TestInterval:
         def sample_data():
             return pd.DataFrame({"chr": ["2"], "start": [100], "stop": [1000]})
 
-        b = regions.GenomicRegions("shub", sample_data, [], get_genome_chr_length())
+        b = regions.GenomicRegions(
+            "shub", sample_data, [], get_genome_chr_length(genome=self.genome)
+        )
         force_load(b.load())
         run_pipegraph()
         assert len(b.df) == 1
@@ -1473,7 +1481,7 @@ class TestInterval:
             return pd.DataFrame({"chr": [], "start": [], "stop": []})
 
         b = regions.GenomicRegions(
-            "shub", sample_data, [], get_genome(), on_overlap="ignore"
+            "shub", sample_data, [], self.genome, on_overlap="ignore"
         )
         force_load(b.load())
         run_pipegraph()
@@ -1525,9 +1533,6 @@ class TestInterval:
         assert len(found) == 0
 
 
-1
-
-
 @pytest.mark.usefixtures("both_ppg_and_no_ppg")
 class TestIntervalTestsNeedingOverlapHandling(TestInterval):
     def test_nested(self):
@@ -1540,7 +1545,7 @@ class TestIntervalTestsNeedingOverlapHandling(TestInterval):
                 }
             )
 
-        genome = get_genome_chr_length()
+        genome = get_genome_chr_length(genome=get_genome())
         a = regions.GenomicRegions("shu", sample_data, [], genome, on_overlap="ignore")
         force_load(a.load())
         run_pipegraph()
@@ -1567,16 +1572,16 @@ class TestIntervalTestsNeedingOverlapHandling(TestInterval):
                         1_447_089,
                     ],
                     "chr": [
-                        "Chromosome",
-                        "Chromosome",
-                        "Chromosome",
-                        "Chromosome",
-                        "Chromosome",
-                        "Chromosome",
-                        "Chromosome",
-                        "Chromosome",
-                        "Chromosome",
-                        "Chromosome",
+                        "1",
+                        "1",
+                        "1",
+                        "1",
+                        "1",
+                        "1",
+                        "1",
+                        "1",
+                        "1",
+                        "1",
                     ],
                     "stop": [
                         667_063,
@@ -1594,30 +1599,30 @@ class TestIntervalTestsNeedingOverlapHandling(TestInterval):
             )
 
         b = regions.GenomicRegions(
-            "shbu", sample_data, [], get_genome(), on_overlap="ignore"
+            "shbu", sample_data, [], self.genome, on_overlap="ignore"
         )
         force_load(b.load())
         run_pipegraph()
-        closest = b.get_closest_by_start("Chromosome", 1_015_327)
+        closest = b.get_closest_by_start("1", 1_015_327)
         assert len(closest)
-        assert closest.iloc[0]["chr"] == "Chromosome"
+        assert closest.iloc[0]["chr"] == "1"
         assert closest.iloc[0]["start"] == 1_051_311
-        closest = b.get_closest_by_start("Chromosome", 0)
+        closest = b.get_closest_by_start("1", 0)
         assert closest.iloc[0]["start"] == 566_564
-        closest = b.get_closest_by_start("Chromosome", 566_564)
+        closest = b.get_closest_by_start("1", 566_564)
         assert closest.iloc[0]["start"] == 566_564
-        closest = b.get_closest_by_start("Chromosome", 569_590)
+        closest = b.get_closest_by_start("1", 569_590)
         assert closest.iloc[0]["start"] == 569_592
-        closest = b.get_closest_by_start("Chromosome", 569_592)
+        closest = b.get_closest_by_start("1", 569_592)
         assert len(closest) == 1
         assert closest.iloc[0]["start"] == 569_592
-        closest = b.get_closest_by_start("Chromosome", 569_592 + 5)
+        closest = b.get_closest_by_start("1", 569_592 + 5)
         assert len(closest) == 1
         assert closest.iloc[0]["start"] == 569_592
-        assert len(b.get_overlapping("Chromosome", 569_592, 569_593)) == 2
-        closest = b.get_closest_by_start("Chromosome", 667_063)
+        assert len(b.get_overlapping("1", 569_592, 569_593)) == 2
+        closest = b.get_closest_by_start("1", 667_063)
         assert closest.iloc[0]["start"] == 713_866
-        closest = b.get_closest_by_start("Chromosome", 570_304)
+        closest = b.get_closest_by_start("1", 570_304)
         assert closest.iloc[0]["start"] == 569_592
 
     def test_empty_chromosome(self):
@@ -1680,7 +1685,9 @@ class TestAssortedGenomicRegion:
                 }
             )
 
-        a = regions.GenomicRegions("shu", sample_data, [], get_genome_chr_length())
+        a = regions.GenomicRegions(
+            "shu", sample_data, [], get_genome_chr_length(genome=get_genome())
+        )
         force_load(a.load)
         run_pipegraph()
         assert a.get_no_of_entries() == 5
@@ -1695,7 +1702,9 @@ class TestAssortedGenomicRegion:
                 }
             )
 
-        a = regions.GenomicRegions("shu", sample_data, [], get_genome_chr_length())
+        a = regions.GenomicRegions(
+            "shu", sample_data, [], get_genome_chr_length(genome=get_genome())
+        )
         force_load(a.load)
         run_pipegraph()
         assert a.covered_bases == 1 + 10 + 110 + 1110 + 11110
@@ -1711,7 +1720,11 @@ class TestAssortedGenomicRegion:
             )
 
         a = regions.GenomicRegions(
-            "shu", sample_data, [], get_genome_chr_length(), on_overlap="ignore"
+            "shu",
+            sample_data,
+            [],
+            get_genome_chr_length(genome=get_genome()),
+            on_overlap="ignore",
         )
         force_load(a.load())
         run_pipegraph()
@@ -1729,7 +1742,9 @@ class TestAssortedGenomicRegion:
                 }
             )
 
-        a = regions.GenomicRegions("shu", sample_data, [], get_genome_chr_length())
+        a = regions.GenomicRegions(
+            "shu", sample_data, [], get_genome_chr_length(genome=get_genome())
+        )
         force_load(a.load)
         run_pipegraph()
         assert a.mean_size == (1.0 + 10 + 110 + 1110 + 11110) / 5
@@ -1963,7 +1978,8 @@ class TestSetOperationsOnGenomicRegions:
                 }
             )
 
-        a = regions.GenomicRegions("sharum", sample_data, [], get_genome_chr_length())
+        g = get_genome_chr_length(genome=get_genome())
+        a = regions.GenomicRegions("sharum", sample_data, [], g)
         b = regions.GenomicRegions_Invert("b", a)
 
         def should_data():
@@ -1993,9 +2009,7 @@ class TestSetOperationsOnGenomicRegions:
                 }
             )
 
-        should = regions.GenomicRegions(
-            "should", should_data, [], get_genome_chr_length()
-        )
+        should = regions.GenomicRegions("should", should_data, [], g)
         force_load(b.load())
         force_load(should.load())
         run_pipegraph()
@@ -2013,7 +2027,9 @@ class TestSetOperationsOnGenomicRegions:
                 }
             )
 
-        a = regions.GenomicRegions("sharum", sample_data, [], get_genome_chr_length())
+        a = regions.GenomicRegions(
+            "sharum", sample_data, [], get_genome_chr_length(genome=get_genome())
+        )
         b = regions.GenomicRegions_Invert("b", a)
         c = regions.GenomicRegions_Invert("c", b)
         force_load(c.load())
@@ -2256,8 +2272,11 @@ class TestSetOperationsOnGenomicRegions:
                 }
             )
 
-        a = regions.GenomicRegions("shu", sample_data, [], get_genome_chr_length())
-        genome2 = get_genome_chr_length(name="arosebyanyothername")
+        g = get_genome()
+        a = regions.GenomicRegions(
+            "shu", sample_data, [], get_genome_chr_length(genome=g)
+        )
+        genome2 = get_genome_chr_length(genome=get_genome(name="arosebyanyothername"))
         b = regions.GenomicRegions("sha", sample_data, [], genome2)
 
         def inner_union():
@@ -2312,7 +2331,7 @@ class TestFromXYZ:
         a = regions.GenomicRegions_FromGFF(
             "shu",
             get_sample_data("mbf_genomics/test.gff3"),
-            get_genome_chr_length(),
+            get_genome_chr_length(genome=get_genome()),
             filter_function=lambda entry: entry["source"]
             == b"Regions_of_sig_enrichment",
             comment_char="#",
@@ -2336,7 +2355,7 @@ class TestFromXYZ:
         a = regions.GenomicRegions_FromGFF(
             "shu",
             get_sample_data("mbf_genomics/test_with_name.gff3"),
-            get_genome_chr_length(),
+            get_genome_chr_length(genome=get_genome()),
             filter_function=lambda entry: entry["source"]
             == b"Regions_of_sig_enrichment",
             comment_char="#",
@@ -2358,10 +2377,11 @@ class TestFromXYZ:
         assert (a.df["name"] == ["reg5", "reg1", "reg2", "reg3"]).all()
 
     def test_gff_below_zero(self):
+        genome = get_genome()
         b = regions.GenomicRegions_FromGFF(
             "sha",
             get_sample_data("mbf_genomics/test_below_zero.gff3"),
-            get_genome_chr_length(),
+            get_genome_chr_length(genome=genome),
             filter_function=lambda entry: entry["source"]
             == b"Regions_of_sig_enrichment",
             comment_char="#",
@@ -2372,7 +2392,7 @@ class TestFromXYZ:
             a = regions.GenomicRegions_FromGFF(
                 "shu",
                 get_sample_data("mbf_genomics/test_below_zero.gff3"),
-                get_genome_chr_length(),
+                get_genome_chr_length(genome=genome),
                 filter_function=lambda entry: entry["source"]
                 == b"Regions_of_sig_enrichment",
                 comment_char="#",
@@ -2390,7 +2410,7 @@ class TestFromXYZ:
                 a = regions.GenomicRegions_FromGFF(
                     "shu",
                     get_sample_data("mbf_genomics/test_below_zero.gff3"),
-                    get_genome_chr_length(),
+                    get_genome_chr_length(genome=genome),
                     filter_function=lambda entry: entry["source"]
                     == b"Regions_of_sig_enrichment",
                     comment_char="#",
@@ -2402,7 +2422,7 @@ class TestFromXYZ:
         a = regions.GenomicRegions_FromGFF(
             "shu",
             get_sample_data("mbf_genomics/test.gff3"),
-            get_genome_chr_length(),
+            get_genome_chr_length(genome=get_genome()),
             filter_function=lambda entry: entry["source"]
             == b"Regions_of_sig_enrichment",
             comment_char="#",
@@ -2425,7 +2445,9 @@ class TestFromXYZ:
 
     def test_bed(self):
         a = regions.GenomicRegions_FromBed(
-            "shu", get_sample_data("mbf_genomics/test.bed"), get_genome_chr_length()
+            "shu",
+            get_sample_data("mbf_genomics/test.bed"),
+            get_genome_chr_length(genome=get_genome()),
         )
         force_load(a.load())
         run_pipegraph()
@@ -2451,7 +2473,9 @@ class TestFromXYZ:
 
     def test_bigbed(self):
         a = regions.GenomicRegions_FromBigBed(
-            "shu", get_sample_data("mbf_genomics/test.bb"), get_genome_chr_length()
+            "shu",
+            get_sample_data("mbf_genomics/test.bb"),
+            get_genome_chr_length(genome=get_genome()),
         )
         force_load(a.load())
         run_pipegraph()
@@ -2463,7 +2487,7 @@ class TestFromXYZ:
         a = regions.GenomicRegions_FromBed(
             "shu",
             get_sample_data("mbf_genomics/test_noscore.bed"),
-            get_genome_chr_length(),
+            get_genome_chr_length(genome=get_genome()),
         )
         force_load(a.load())
         run_pipegraph()
@@ -2479,7 +2503,7 @@ class TestFromXYZ:
         a = regions.GenomicRegions_FromBed(
             "shu",
             get_sample_data("mbf_genomics/test_constant_name.bed"),
-            get_genome_chr_length(),
+            get_genome_chr_length(genome=get_genome()),
         )
         force_load(a.load())
         run_pipegraph()
@@ -2495,7 +2519,7 @@ class TestFromXYZ:
             a = regions.GenomicRegions_FromBed(
                 "shu",
                 get_sample_data("mbf_genomics/test_empty.bed"),
-                get_genome_chr_length(),
+                get_genome_chr_length(genome=get_genome()),
             )
             force_load(a.load())
 
@@ -2503,7 +2527,7 @@ class TestFromXYZ:
         a = regions.GenomicRegions_FromWig(
             "shu",
             get_sample_data("mbf_genomics/test.wig"),
-            get_genome_chr_length(),
+            get_genome_chr_length(genome=get_genome()),
             enlarge_5prime=2,
             enlarge_3prime=1,
         )
@@ -2531,7 +2555,7 @@ class TestFromXYZ:
         a = regions.GenomicRegions_FromPartec(
             "shu",
             get_sample_data("mbf_genomics/test_partec.txt"),
-            get_genome_chr_length(),
+            get_genome_chr_length(genome=get_genome()),
         )
         force_load(a.load())
         run_pipegraph()
@@ -2547,7 +2571,7 @@ class TestFromXYZ:
         ).all()
 
     def test_binned(self):
-        genome = get_genome_chr_length()
+        genome = get_genome_chr_length(genome=get_genome())
         with pytest.raises(ValueError):
             regions.GenomicRegions_BinnedGenome(genome, 10000, "1")
         a = regions.GenomicRegions_BinnedGenome(genome, 10000, ["1"])
@@ -2559,7 +2583,7 @@ class TestFromXYZ:
         assert len(b.df) == 10 + 20 + 30 + 40 + 50
 
     def test_windowed(self):
-        genome = get_genome_chr_length()
+        genome = get_genome_chr_length(genome=get_genome())
         a = regions.GenomicRegions_Windows(genome, "win1", 10000, 0, ["1"])
         b = regions.GenomicRegions_Windows(genome, "win2", 10000, 10000, ["1"])
         c = regions.GenomicRegions_Windows(genome, "win3", 10000, 0)
@@ -2575,7 +2599,7 @@ class TestFromXYZ:
 @pytest.mark.usefixtures("no_pipegraph")
 class TestOutsideOfPipegraph:
     def test_ignores_second_loading(self):
-        genome = get_genome_chr_length()
+        genome = get_genome_chr_length(genome=get_genome())
         counter = [0]
 
         def sample_data():
@@ -2674,7 +2698,9 @@ class TestTagCountAnnotator:
             chr_lengths={"1": 10050},
         )
         a = regions.GenomicRegions_BinnedGenome(genome, 1000, ["1"])
-        b = regions.GenomicRegions("B", lambda: a.df.assign(strand=1), [a.load()], genome)
+        b = regions.GenomicRegions(
+            "B", lambda: a.df.assign(strand=1), [a.load()], genome
+        )
         mb_lane = MockLane(mb, genome)
         anno = genes.anno_tag_counts.GRStrandedRust(mb_lane)
         b.add_annotator(anno)

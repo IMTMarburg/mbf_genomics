@@ -8,17 +8,17 @@
 import sys
 import pytest  # noqa:F401
 from pathlib import Path
-import pypipegraph2
+import pypipegraph2  # noqa:F401
+
 pypipegraph2.replace_ppg1()
-from pypipegraph2.testing.fixtures import job_trace_log
 
 from pypipegraph.testing.fixtures import (  # noqa:F401
     new_pipegraph,
     both_ppg_and_no_ppg,
     no_pipegraph,
     pytest_runtest_makereport,
-    job_trace_log,
 )  # noqa:F401
+from pypipegraph2.testing.fixtures import job_trace_log  # noqa:F401
 from mbf_qualitycontrol.testing.fixtures import (  # noqa:F401
     new_pipegraph_no_qc,
     both_ppg_and_no_ppg_no_qc,

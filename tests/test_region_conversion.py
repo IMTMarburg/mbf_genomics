@@ -6,7 +6,7 @@ import pypipegraph as ppg
 from mbf_genomics import regions, genes
 from mbf_genomics.annotator import Constant
 
-from .shared import get_genome, get_genome_chr_length, force_load, run_pipegraph
+from .shared import get_genome, get_genome_chr_length, force_load, run_pipegraph, RaisesDirectOrInsidePipegraph
 
 
 @pytest.mark.usefixtures("both_ppg_and_no_ppg")
@@ -58,10 +58,9 @@ class TestGenomicRegionConvertTests:
             return None
 
         a = regions.GenomicRegions("sharum", sample_data, [], get_genome_chr_length())
-        with pytest.raises(ValueError):
+        with RaisesDirectOrInsidePipegraph(ValueError):
             a.convert("a+1", convert)
             force_load(a.load())
-            run_pipegraph()
 
     def test_raises_on_non_genome(self):
         def sample_data():

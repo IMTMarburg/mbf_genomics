@@ -77,7 +77,7 @@ class TestGenesLoading:
             g = genes.Genes(get_genome_chr_length(), lambda: None, "myname")
             force_load(g.load())
 
-    def test_alternative_loading_raises_on_missing_column(self):
+    def test_alternative_loading_raises_on_missing_column(self, both_ppg_and_no_ppg):
         df = pd.DataFrame(
             [
                 {
@@ -112,28 +112,34 @@ class TestGenesLoading:
             df2 = df2.drop("tss", axis=1)
             g = genes.Genes(get_genome(), lambda: df2, name="sha")
             g.load()
-            run_pipegraph()
+            # run_pipegraph()
 
         def inner_chr():
             df2 = df.copy()
             df2 = df2.drop("chr", axis=1)
             g = genes.Genes(get_genome(), lambda: df2, name="shu")
             g.load()
-            run_pipegraph()
+            # run_pipegraph()
 
         def inner_tes():
             df2 = df.copy()
             df2 = df2.drop("tes", axis=1)
             g = genes.Genes(get_genome(), lambda: df2, name="shi")
             g.load()
-            run_pipegraph()
+            # run_pipegraph()
 
-        with pytest.raises(ValueError):
+        with RaisesDirectOrInsidePipegraph(ValueError):
             inner_tss()
-        with pytest.raises(ValueError):
+        if ppg.util.global_pipegraph is not None:
+            both_ppg_and_no_ppg.new_pipegraph()
+        with RaisesDirectOrInsidePipegraph(ValueError):
             inner_tes()
-        with pytest.raises(ValueError):
+        if ppg.util.global_pipegraph is not None:
+            both_ppg_and_no_ppg.new_pipegraph()
+        with RaisesDirectOrInsidePipegraph(ValueError):
             inner_chr()
+        if ppg.util.global_pipegraph is not None:
+            both_ppg_and_no_ppg.new_pipegraph()
 
     def test_alternative_loading_raises_on_missing_name(self):
         df = pd.DataFrame(
@@ -198,10 +204,9 @@ class TestGenesLoading:
             ]
         )
 
-        with pytest.raises(ValueError):
+        with RaisesDirectOrInsidePipegraph(ValueError):
             g = genes.Genes(get_genome(), lambda: df, name="shu")
             force_load(g.load())
-            run_pipegraph()
 
     def test_alternative_loading_raises_on_non_int_tss(self):
         df = pd.DataFrame(
@@ -233,10 +238,9 @@ class TestGenesLoading:
             ]
         )
 
-        with pytest.raises(ValueError):
+        with RaisesDirectOrInsidePipegraph(ValueError):
             g = genes.Genes(get_genome(), lambda: df, name="shu")
             force_load(g.load())
-            run_pipegraph()
 
     def test_alternative_loading_raises_on_non_int_tes(self):
         df = pd.DataFrame(
@@ -268,10 +272,9 @@ class TestGenesLoading:
             ]
         )
 
-        with pytest.raises(ValueError):
+        with RaisesDirectOrInsidePipegraph(ValueError):
             g = genes.Genes(get_genome(), lambda: df, name="shu")
             force_load(g.load())
-            run_pipegraph()
 
     def test_do_load_only_happens_once(self):
         df = pd.DataFrame(
@@ -849,9 +852,12 @@ class TestGenes:
         b = g.write("b.xls")
         mangle = lambda df: df.head()  # noqa: E731
         c = g.write("c.xls", mangle)
-        # this is ok...
-        c = g.write("c.xls", mangle)
+        # this is ok... in ppg1 only., not in ppg2 strict
+        # c = g.write("c.xls", mangle)
         if ppg.util.inside_ppg():  # this is ok outside of ppg
+            if hasattr(ppg, "is_ppg2"):
+                with pytest.raises(ValueError):
+                    c = g.write("c.xls", mangle)
             with pytest.raises(ValueError):
                 g.write("c.xls", lambda df: df.tail())
         run_pipegraph()
