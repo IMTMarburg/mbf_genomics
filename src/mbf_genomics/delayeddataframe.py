@@ -438,7 +438,7 @@ class DelayedDataFrame(object):
         output_filename = self.pathify(output_filename).relative_to(Path('.').absolute())
 
 
-        def do_plot(output_filename=output_filename):
+        def do_plot(output_filename):
             df = self.df
             if calc_func is not None:
                 df = calc_func(df)

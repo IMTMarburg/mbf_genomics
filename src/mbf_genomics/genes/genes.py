@@ -385,7 +385,7 @@ class Genes(GenomicRegions):
 
         output_filename = self.pathify(output_filename, self.name + ".bed")
 
-        def write(output_filename=output_filename):
+        def write(output_filename):
             bed_entries = []
             for dummy_idx, row in self.df.iterrows():
                 entry = BedEntry(

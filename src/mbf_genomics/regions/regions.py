@@ -426,7 +426,7 @@ class GenomicRegions(DelayedDataFrame):
 
         output_filename = self.pathify(output_filename, self.name + ".bed")
 
-        def write(output_filename=output_filename):
+        def write(output_filename):
             bed_entries = []
             for ii, row in self.df.iterrows():
                 if region_name is None:
@@ -479,7 +479,7 @@ class GenomicRegions(DelayedDataFrame):
 
         output_filename = self.pathify(output_filename, self.name + ".bigbed")
 
-        def write(output_filename=output_filename):
+        def write(output_filename):
 
             bed_entries = []
             for idx, row in self.df.iterrows():

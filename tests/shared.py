@@ -16,7 +16,7 @@ ppg_genome = None
 def get_genome(name='get_genome_genome'):
     global ppg_genome
     cache_dir = Path(__file__).parent / "run" / "genome_cache"
-    if ppg_genome is None:
+    if ppg_genome is None or ppg_genome.name != name:
         old_pipegraph = ppg.util.global_pipegraph
         ppg.new_pipegraph()
         g = get_Candidatus_carsonella_ruddii_pv(
