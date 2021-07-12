@@ -43,7 +43,13 @@ class CounterStrategyStrandedRust(_CounterStrategyBase):
         self.disable_sanity_check = False
 
     def count_reads(
-        self, interval_strategy, genome, bam_filename, bam_index_name, reverse=False
+        self,
+        interval_strategy,
+        genome,
+        bam_filename,
+        bam_index_name,
+        reverse=False,
+        dump_matching_reads_filename=None,
     ):
         # bam_filename = bamfil
 
@@ -52,7 +58,11 @@ class CounterStrategyStrandedRust(_CounterStrategyBase):
         from mbf_bam import count_reads_stranded
 
         res = count_reads_stranded(
-            bam_filename, bam_index_name, intervals, gene_intervals
+            bam_filename,
+            bam_index_name,
+            intervals,
+            gene_intervals,
+            matching_reads_output_bam_filename=dump_matching_reads_filename,
         )
         self.sanity_check(res, bam_filename)
         return res
@@ -91,9 +101,19 @@ class CounterStrategyUnstrandedRust(_CounterStrategyBase):
     name = "unstranded"
 
     def count_reads(
-        self, interval_strategy, genome, bam_filename, bam_index_name, reverse=False
+        self,
+        interval_strategy,
+        genome,
+        bam_filename,
+        bam_index_name,
+        reverse=False,
+        dump_matching_reads_filename=None,
     ):
         # bam_filename = bamfil
+        if dump_matching_reads_filename:
+            raise ValueError(
+                "dump_matching_reads_filename not supoprted on this Counter"
+            )
 
         intervals = interval_strategy._get_interval_tuples_by_chr(genome)
         gene_intervals = IntervalStrategyGene()._get_interval_tuples_by_chr(genome)
@@ -219,7 +239,11 @@ class TagCountCommonQC:
         output_filename = genes.result_dir / self.qc_folder / "read_distribution.png"
         output_filename.parent.mkdir(exist_ok=True)
 
-        def plot(output_filename, elements, qc_distribution_scale_y_name=self.qc_distribution_scale_y_name):
+        def plot(
+            output_filename,
+            elements,
+            qc_distribution_scale_y_name=self.qc_distribution_scale_y_name,
+        ):
             df = genes.df
             df = dp(df).select({x.aligned_lane.name: x.columns[0] for x in elements}).pd
             if len(df) == 0:
@@ -326,7 +350,13 @@ class TagCountCommonQC:
 
 class _FastTagCounter(Annotator, TagCountCommonQC):
     def __init__(
-        self, aligned_lane, count_strategy, interval_strategy, column_name, column_desc
+        self,
+        aligned_lane,
+        count_strategy,
+        interval_strategy,
+        column_name,
+        column_desc,
+        dump_matching_reads_filename=None,
     ):
         if not hasattr(aligned_lane, "get_bam"):
             raise ValueError("_FastTagCounter only accepts aligned lanes!")
@@ -346,6 +376,7 @@ class _FastTagCounter(Annotator, TagCountCommonQC):
         self.plot_name = self.aligned_lane.name
         self.qc_folder = f"{self.count_strategy.name}_{self.interval_strategy.name}"
         self.qc_distribution_scale_y_name = "raw counts"
+        self.dump_matching_reads_filename = dump_matching_reads_filename
 
     def calc(self, df):
         if ppg.inside_ppg():
@@ -360,12 +391,20 @@ class _FastTagCounter(Annotator, TagCountCommonQC):
         return pd.Series(result)
 
     def deps(self, _genes):
-        return [self.load_data()]
+        return [
+            self.load_data(),
+            ppg.ParameterInvariant(self.cache_name, self.dump_matching_reads_filename)
+            # todo: actually, this should be a declared file
+        ]
 
     def calc_data(self):
         bam_file, bam_index_name = self.aligned_lane.get_bam_names()
         return self.count_strategy.count_reads(
-            self.interval_strategy, self.genome, bam_file, bam_index_name
+            self.interval_strategy,
+            self.genome,
+            bam_file,
+            bam_index_name,
+            dump_matching_reads_filename=self.dump_matching_reads_filename,
         )
 
     def load_data(self):
@@ -442,7 +481,7 @@ class _FastTagCounterGR(Annotator):
 
 
 class ExonSmartStrandedRust(_FastTagCounter):
-    def __init__(self, aligned_lane):
+    def __init__(self, aligned_lane, dump_matching_reads_filename=None):
         _FastTagCounter.__init__(
             self,
             aligned_lane,
@@ -450,6 +489,7 @@ class ExonSmartStrandedRust(_FastTagCounter):
             IntervalStrategyExonSmart(),
             "Exon, protein coding, stranded smart tag count %s",
             "Tag count inside exons of protein coding transcripts (all if no protein coding transcripts) exons, correct strand only",
+            dump_matching_reads_filename,
         )
 
 
@@ -466,7 +506,7 @@ class ExonSmartUnstrandedRust(_FastTagCounter):
 
 
 class ExonStrandedRust(_FastTagCounter):
-    def __init__(self, aligned_lane):
+    def __init__(self, aligned_lane, dump_matching_reads_filename=None):
         _FastTagCounter.__init__(
             self,
             aligned_lane,
@@ -474,6 +514,7 @@ class ExonStrandedRust(_FastTagCounter):
             IntervalStrategyExon(),
             "Exon, protein coding, stranded tag count %s",
             "Tag count inside exons of protein coding transcripts (all if no protein coding transcripts) exons, correct strand only",
+            dump_matching_reads_filename,
         )
 
 

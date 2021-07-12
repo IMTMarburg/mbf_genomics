@@ -64,7 +64,7 @@ def MockBam(chr, length, mode=1):
 
 def MockBamFixed(reads):
     """Each read is a
-            dict: strand, regions, tags, qname, is_read1
+    dict: strand, regions, tags, qname, is_read1
     """
     ii = 0
     for read in reads:
@@ -490,13 +490,21 @@ class TestExonSmartCount:
         genome = MockGenome(genes, transcripts, {"1": 10000})
         gr = Genes(genome)
         lane = MockLane(bam, genome)
-        anno = anno_tag_counts.ExonSmartStranded(lane)
+        anno = anno_tag_counts.ExonSmartStranded(lane, "output.bam")
         anno.count_strategy.disable_sanity_check = True
         force_load(gr.add_annotator(anno))
         run_pipegraph()
         df = gr.df.sort_values("name")
         print(df)
         assert (df[anno.columns[0]] == np.array([100 * 4, (100 + 150) * 1])).all()
+        import pysam
+
+        f = pysam.Samfile("output.bam")
+        reads = list(f.fetch())
+        assert (
+            len(reads) == gr.df[anno.columns[0]].sum() 
+        )  # since we have each fw read 4 times in the bam, and we keep all of them
+
 
     def test_stranded_dedup(self):
 
@@ -564,8 +572,7 @@ class TestExonSmartCount:
         force_load(gr.add_annotator(anno))
         run_pipegraph()
         assert (gr.df[anno.columns[0]] == np.array([100 * 1, (100 + 150) * 1])).all()
-
-
+        
 @pytest.mark.usefixtures("both_ppg_and_no_ppg_no_qc")
 class TestExonCount:
     def test_unstranded(self):
