@@ -56,6 +56,9 @@ class CounterStrategyStrandedRust(_CounterStrategyBase):
         intervals = interval_strategy._get_interval_tuples_by_chr(genome)
         gene_intervals = IntervalStrategyGene()._get_interval_tuples_by_chr(genome)
         from mbf_bam import count_reads_stranded
+        if dump_matching_reads_filename:
+            dump_matching_reads_filename = str(dump_matching_reads_filename)
+
 
         res = count_reads_stranded(
             bam_filename,
@@ -393,7 +396,11 @@ class _FastTagCounter(Annotator, TagCountCommonQC):
     def deps(self, _genes):
         return [
             self.load_data(),
-            ppg.ParameterInvariant(self.cache_name, self.dump_matching_reads_filename)
+            ppg.ParameterInvariant(self.cache_name, self.dump_matching_reads_filename),
+            ppg.FunctionInvariant(
+                self.cache_name + "_count_reads",
+                self.count_strategy.__class__.count_reads,
+            )
             # todo: actually, this should be a declared file
         ]
 
