@@ -473,7 +473,7 @@ class DelayedDataFrame(object):
         if output_filename is None:
             output_filename = default
         output_filename = Path(output_filename)
-        if not output_filename.is_absolute():
+        if not output_filename.is_absolute() and not '/' in str(output_filename):
             output_filename = self.result_dir / output_filename
         return output_filename.absolute()
 
