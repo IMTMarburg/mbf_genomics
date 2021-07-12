@@ -83,7 +83,7 @@ class Test_DelayedDataFrameDirect:
         a = DelayedDataFrame("shu", load, result_dir="sha")
         fn = a.write("sha.xls")[1]
         assert fn.exists()
-        assert_frame_equal(pd.read_csv(fn, sep="\t"), test_df)
+        assert_frame_equal(pd.read_excel(fn), test_df)
 
     def test_write_mangle(self):
         test_df = pd.DataFrame({"A": [1, 2], "B": ["c", "d"]})

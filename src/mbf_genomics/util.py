@@ -10,6 +10,11 @@ def read_pandas(filename):
             filein = pd.read_excel(filename)
         except XLRDError:
             filein = pd.read_csv(filename, sep="\t")
+        except ValueError as e:
+            if 'Excel file format cannot be determined' in str(e):
+                filein = pd.read_csv(filename, sep="\t")
+            else:
+                raise
         return filein
 
     elif filename.endswith(".tsv"):
