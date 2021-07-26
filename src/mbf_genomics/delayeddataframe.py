@@ -783,11 +783,6 @@ class Load_PPG:
             calc,
             load,
         )
-        (
-            self.ddf.cache_dir
-            / anno.__class__.__name__
-            / (anno.get_cache_name() + ".columns")
-        ).write_text(repr(anno.columns))
 
         ppg.Job.depends_on(
             job, self.load()
