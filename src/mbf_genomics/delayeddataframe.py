@@ -2,6 +2,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import pypipegraph as ppg
+import threading
 
 from .annotator import Annotator
 from mbf_externals.util import lazy_method
@@ -355,6 +356,7 @@ class DelayedDataFrame(object):
             for f in functors:
                 keep &= f(df)
             return keep
+
         filter_func._dependency_params = (definition, column_lookup)
         return filter_func, annotators
 
@@ -394,7 +396,7 @@ class DelayedDataFrame(object):
         """
         output_filename = self.pathify(
             output_filename, self.get_table_filename().absolute()
-        ).relative_to(Path('.').absolute())
+        ).relative_to(Path(".").absolute())
 
         def write(output_filename):
             if mangler_function:
@@ -435,8 +437,9 @@ class DelayedDataFrame(object):
         return self.load_strategy.generate_file(output_filename, write, deps)
 
     def plot(self, output_filename, plot_func, calc_func=None, annotators=None):
-        output_filename = self.pathify(output_filename).relative_to(Path('.').absolute())
-
+        output_filename = self.pathify(output_filename).relative_to(
+            Path(".").absolute()
+        )
 
         def do_plot(output_filename):
             df = self.df
@@ -473,7 +476,7 @@ class DelayedDataFrame(object):
         if output_filename is None:
             output_filename = default
         output_filename = Path(output_filename)
-        if not output_filename.is_absolute() and not '/' in str(output_filename):
+        if not output_filename.is_absolute() and not "/" in str(output_filename):
             output_filename = self.result_dir / output_filename
         return output_filename.absolute()
 
@@ -581,6 +584,7 @@ class Load_PPG:
         self.deps = deps
         self.build_deps = True
         self.tree_fixed = False
+        self.lock = threading.Lock()
 
     def add_annotator(self, anno):
         if ppg.util.global_pipegraph.running:
@@ -706,15 +710,18 @@ class Load_PPG:
 
             import pypipegraph2 as ppg2
             import time
-            time.sleep(1)
-            ppg2.util.log_error(f"retreiving for {self.ddf.name}  from {self.ddf.parent.name} {anno.columns} - available {self.ddf.parent.df.columns}  {id(self.ddf.parent.df)}")
-            self.ddf.df = pd.concat(
-                [
-                    self.ddf.df,
-                    self.ddf.parent.df[anno.columns].reindex(self.ddf.df.index),
-                ],
-                axis=1,
-            )
+
+            # ppg2.util.log_error(
+            # f"retreiving for {self.ddf.name}  from {self.ddf.parent.name} {anno.columns} - available {self.ddf.parent.df.columns}  {id(self.ddf.parent.df)}"
+            # )
+            with self.lock:
+                self.ddf.df = pd.concat(
+                    [
+                        self.ddf.df,
+                        self.ddf.parent.df[anno.columns].reindex(self.ddf.df.index),
+                    ],
+                    axis=1,
+                )
 
         job = ppg.DataLoadingJob(self.ddf.cache_dir / anno.get_cache_name(), load)
         job.depends_on(
@@ -762,9 +769,13 @@ class Load_PPG:
                 )
             import pypipegraph2 as ppg2
             import os
+
             old_id = id(self.ddf.df)
-            self.ddf.df = _combine_annotator_df_and_old_df(df, self.ddf.df)
-            ppg2.util.log_error(f"added to {self.ddf.name} {df.columns} {self.ddf.df.columns} {id(self.ddf.df)} {old_id}")
+            with self.lock:
+                self.ddf.df = _combine_annotator_df_and_old_df(df, self.ddf.df)
+            # ppg2.util.log_error(
+            # f"added to {self.ddf.name} {df.columns} {self.ddf.df.columns} {id(self.ddf.df)} {old_id}"
+            # )
 
         (self.ddf.cache_dir / anno.__class__.__name__).mkdir(exist_ok=True)
         job = ppg.CachedDataLoadingJob(
@@ -772,6 +783,12 @@ class Load_PPG:
             calc,
             load,
         )
+        (
+            self.ddf.cache_dir
+            / anno.__class__.__name__
+            / (anno.get_cache_name() + ".columns")
+        ).write_text(repr(anno.columns))
+
         ppg.Job.depends_on(
             job, self.load()
         )  # both the load and the calc needs our ddf.df
