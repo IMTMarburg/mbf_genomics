@@ -152,15 +152,15 @@ def GenomicRegions_FromBed(
         data = {}
         entries = read_bed(filename)
         data["chr"] = np.array(
-            [chromosome_mangler(to_string(e.refseq)) for e in entries], dtype=np.object
+            [chromosome_mangler(to_string(e.refseq)) for e in entries], dtype=object
         )
         data["start"] = np.array([e.position for e in entries], dtype=np.int32)
         data["stop"] = np.array(
             [e.position + e.length for e in entries], dtype=np.int32
         )
-        data["score"] = np.array([e.score for e in entries], dtype=np.float)
+        data["score"] = np.array([e.score for e in entries], dtype=float)
         data["strand"] = np.array([e.strand for e in entries], dtype=np.int8)
-        data["name"] = np.array([to_string(e.name) for e in entries], dtype=np.object)
+        data["name"] = np.array([to_string(e.name) for e in entries], dtype=object)
         data = pd.DataFrame(data)
         if filter_invalid_chromosomes:  # pragma: no cover
             keep = [x in valid_chromosomes for x in data["chr"]]

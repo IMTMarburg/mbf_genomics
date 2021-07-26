@@ -706,22 +706,24 @@ class Load_PPG:
 
     def _anno_load(self, anno):
         def load():
-            import os
-
-            import pypipegraph2 as ppg2
-            import time
 
             # ppg2.util.log_error(
             # f"retreiving for {self.ddf.name}  from {self.ddf.parent.name} {anno.columns} - available {self.ddf.parent.df.columns}  {id(self.ddf.parent.df)}"
             # )
+            new_cols = self.ddf.parent.df[anno.columns].reindex(self.ddf.df.index)
             with self.lock:
                 self.ddf.df = pd.concat(
                     [
                         self.ddf.df,
-                        self.ddf.parent.df[anno.columns].reindex(self.ddf.df.index),
+                        new_cols,
                     ],
                     axis=1,
                 )
+            if hasattr(ppg, "is_ppg2"):
+                import pypipegraph2 as ppg2
+
+                my_hash = ppg2.hashers.hash_bytes(new_cols.values.tobytes())
+                return ppg2.ValuePlusHash(None, my_hash)
 
         job = ppg.DataLoadingJob(self.ddf.cache_dir / anno.get_cache_name(), load)
         job.depends_on(
@@ -767,10 +769,8 @@ class Load_PPG:
                     anno.get_cache_name(),
                     set(df.columns).intersection(self.ddf.df.columns),
                 )
-            import pypipegraph2 as ppg2
-            import os
 
-            old_id = id(self.ddf.df)
+            # old_id = id(self.ddf.df)
             with self.lock:
                 self.ddf.df = _combine_annotator_df_and_old_df(df, self.ddf.df)
             # ppg2.util.log_error(

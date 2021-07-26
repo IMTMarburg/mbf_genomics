@@ -56,9 +56,9 @@ class CounterStrategyStrandedRust(_CounterStrategyBase):
         intervals = interval_strategy._get_interval_tuples_by_chr(genome)
         gene_intervals = IntervalStrategyGene()._get_interval_tuples_by_chr(genome)
         from mbf_bam import count_reads_stranded
+
         if dump_matching_reads_filename:
             dump_matching_reads_filename = str(dump_matching_reads_filename)
-
 
         res = count_reads_stranded(
             bam_filename,
