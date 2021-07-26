@@ -330,7 +330,7 @@ def GenomicRegions_Common(
         union = merge_df_intervals(
             pd.concat([x.df[["chr", "start", "stop"]] for x in list_of_grs])
         ).reset_index(drop=True)
-        keep = np.ones((len(union),), dtype=np.bool)
+        keep = np.ones((len(union),), dtype=bool)
         for gr in list_of_grs:
             for ii, row in union.iterrows():
                 if keep[
@@ -628,7 +628,7 @@ def GenomicRegions_CommonInAtLeastX(
         union = merge_df_intervals(
             pd.concat([x.df[["chr", "start", "stop"]] for x in list_of_grs])
         ).reset_index()
-        keep = np.zeros((len(union),), dtype=np.bool)
+        keep = np.zeros((len(union),), dtype=bool)
         for ii, row in union.iterrows():
             count = 0
             for gr in list_of_grs:
@@ -712,7 +712,7 @@ def GenomicRegions_FilterRemoveOverlapping(
     verify_same_genome([gr_a] + other_grs)
 
     def filter_func(df):
-        keep = np.zeros((len(df)), dtype=np.bool)
+        keep = np.zeros((len(df)), dtype=bool)
         for ii, tup in enumerate(df[["chr", "start", "stop"]].itertuples()):
             for other_gr in other_grs:
                 keep[ii] = keep[ii] | other_gr.has_overlapping(
@@ -757,7 +757,7 @@ def GenomicRegions_FilterToOverlapping(
     verify_same_genome([gr_a] + other_grs)
 
     def filter_func(df):
-        keep = np.ones((len(df)), dtype=np.bool)
+        keep = np.ones((len(df)), dtype=bool)
         for ii, row in enumerate(df[["chr", "start", "stop"]].itertuples()):
             for gr in other_grs:
                 keep[ii] &= gr.has_overlapping(row.chr, row.start, row.stop)
