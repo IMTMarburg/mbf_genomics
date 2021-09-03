@@ -11,7 +11,7 @@ def read_pandas(filename):
         except XLRDError:
             filein = pd.read_csv(filename, sep="\t")
         except ValueError as e:
-            if 'Excel file format cannot be determined' in str(e):
+            if "Excel file format cannot be determined" in str(e):
                 filein = pd.read_csv(filename, sep="\t")
             else:
                 raise
@@ -32,8 +32,12 @@ def freeze(obj):
         to get a hash value..
     """
     # TODO: combine with ppg.util.freeze
-    import pypipegraph as ppg
-    return ppg.util.freeze(obj)
+    if hasattr(obj, "__freeze__"):
+        return obj.__freeze__()
+    else:
+        import pypipegraph as ppg
+
+        return ppg.util.freeze(obj)
 
 
 def parse_a_or_c(ac):

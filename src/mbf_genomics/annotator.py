@@ -43,6 +43,9 @@ class Annotator(ABC):
     def __repr__(self):
         return "Annotator(%s)" % self.columns[0]
 
+    def __freeze__(self):
+        return "Annotator(%s)" % self.columns[0]
+
     def get_cache_name(self):
         if hasattr(self, "cache_name"):
             return self.cache_name
