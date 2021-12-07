@@ -18,7 +18,11 @@ from pathlib import Path
 from dppd import dppd
 import dppd_plotnine  # noqa:F401
 from mbf_qualitycontrol import register_qc, QCCollectingJob, qc_disabled
-from mbf_genomics.util import parse_a_or_c_to_plot_name
+from mbf_genomics.util import (
+    parse_a_or_c_to_plot_name,
+    parse_a_or_c_to_column,
+    parse_a_or_c_to_anno,
+)
 from pandas import DataFrame
 
 dp, X = dppd()
@@ -773,12 +777,12 @@ class TMM(Annotator):
         if batches is not None:
             for sample_name in raw:
                 self.sample_column_lookup[
-                    raw[sample_name].columns[0]
+                    parse_a_or_c_to_column(raw[sample_name])
                 ] = f"{sample_name}{suffix} TMM (batch removed)"
         else:
             for sample_name in raw:
                 self.sample_column_lookup[
-                    raw[sample_name].columns[0]
+                    parse_a_or_c_to_column(raw[sample_name])
                 ] = f"{sample_name}{suffix} TMM"
         self.columns = list(self.sample_column_lookup.values())
         self.dependencies = []
@@ -807,13 +811,23 @@ class TMM(Annotator):
         DataFrame
             A dataframe containing TMM normalized columns for each
         """
-        raw_columns = [self.raw[sample_name].columns[0] for sample_name in self.raw]
+        raw_columns = [
+            parse_a_or_c_to_column(self.raw[sample_name]) for sample_name in self.raw
+        ]
+        
         df = ddf.df[raw_columns]
         df_res = self.call_edgeR(df)
+        assert (df_res.columns == df.columns).all()
         rename = {}
+        before = df_res.columns.copy()
         for col in df_res.columns:
             rename[col] = self.sample_column_lookup[col]
-        df_res = df_res.rename(columns=rename)
+        df_res = df_res.rename(columns=rename, errors='raise')
+        if (df_res.columns == before).all():
+            # there is a bug in pands 1.3.4 that prevents renaming
+            # to work when multiindices / tuple named columns are involved
+            # so we have to build it by hand, I suppose
+            df_res = pd.DataFrame({v: df_res[k] for (k,v) in rename.items()})
         return df_res
 
     def call_edgeR(self, df_counts: DataFrame) -> DataFrame:
@@ -886,4 +900,4 @@ class TMM(Annotator):
 
     def dep_annos(self) -> List[Annotator]:
         """Return other annotators"""
-        return list(self.raw.values())
+        return [parse_a_or_c_to_anno(x) for x in self.raw.values()]
